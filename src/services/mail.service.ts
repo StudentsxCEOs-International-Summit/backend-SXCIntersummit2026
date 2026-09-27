@@ -6,6 +6,7 @@ export interface SendMailOptions {
   subject: string;
   html: string;
   text?: string;
+  attachments?: nodemailer.SendMailOptions["attachments"];
 }
 
 let transporter: nodemailer.Transporter | null = null;
@@ -46,6 +47,13 @@ export async function sendMail(
     console.log(`From    : ${fromAddress}`);
     console.log(`Subject : ${options.subject}`);
     console.log(`Body    : ${options.text || options.html}`);
+    if (options.attachments && options.attachments.length > 0) {
+      console.log(
+        `Attachments: ${options.attachments
+          .map((a: any) => a.filename || a.cid)
+          .join(", ")}`,
+      );
+    }
     return { success: true, messageId: "mock-email-id" };
   }
 
@@ -56,6 +64,7 @@ export async function sendMail(
       subject: options.subject,
       text: options.text,
       html: options.html,
+      attachments: options.attachments,
     });
 
     console.log(
@@ -71,6 +80,93 @@ export async function sendMail(
   }
 }
 
+interface EmailLayoutOptions {
+  title: string;
+  headerHeading?: string;
+  contentHtml: string;
+}
+
+function renderEmailTemplate({
+  title,
+  headerHeading,
+  contentHtml,
+}: EmailLayoutOptions): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>${title}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; color: #1e293b; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f1f5f9; padding: 36px 12px;">
+    <tr>
+      <td align="center">
+        <!-- Main Card Container -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 560px; width: 100%; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04); border: 1px solid #e2e8f0;">
+          
+          <!-- Redesigned Header: SXC Brand Deep Gradient + Logo + Badge + Gold Accent -->
+          <tr>
+            <td style="background-color: #0b1536; background: linear-gradient(145deg, #091129 0%, #172554 45%, #1e3a8a 80%, #2563eb 100%); padding: 36px 24px 28px 24px; text-align: center; border-bottom: 3px solid #f59e0b;">
+              
+              <!-- SXC Logo from Hosted Image URL -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center">
+                    <img src="${env.EMAIL_LOGO_URL}" alt="SXC International Summit Logo" width="135" style="display: block; margin: 0 auto; width: 135px; max-width: 140px; height: auto; border: 0; outline: none; text-decoration: none;" />
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Summit Pill Badge -->
+              <div style="margin-top: 14px; text-align: center;">
+                <div style="display: inline-block; padding: 5px 14px; background-color: rgba(255, 255, 255, 0.12); border: 1px solid rgba(251, 191, 36, 0.55); border-radius: 9999px;">
+                  <span style="color: #ffffff; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;">
+                    StudentsxCEOs International Summit 2026
+                  </span>
+                </div>
+              </div>
+
+              ${
+                headerHeading
+                  ? `<h1 style="margin: 14px 0 0 0; color: #ffffff; font-size: 19px; font-weight: 700; letter-spacing: 0.2px;">${headerHeading}</h1>`
+                  : ""
+              }
+            </td>
+          </tr>
+
+          <!-- Main Content Section -->
+          <tr>
+            <td style="padding: 36px 28px; background-color: #ffffff;">
+              ${contentHtml}
+            </td>
+          </tr>
+
+          <!-- Footer with Verified Social Media & Organization Copyright -->
+          <tr>
+            <td style="background-color: #f8fafc; padding: 22px 28px; text-align: center; border-top: 1px solid #e2e8f0;">
+              <p style="margin: 0 0 10px 0; font-size: 12px; color: #64748b; font-weight: 600;">
+                Connect with us:
+                <a href="https://instagram.com/sxcintersummit" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; margin: 0 6px;">Instagram</a> &bull;
+                <a href="https://linkedin.com/company/studentsxceos-international-summit" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; margin: 0 6px;">LinkedIn</a> &bull;
+                <a href="https://tiktok.com/@intersummitsxc" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; margin: 0 6px;">TikTok</a>
+              </p>
+              <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #94a3b8;">
+                If you did not initiate this request, you can safely ignore this email.<br>
+                &copy; 2026 StudentsxCEOs International Summit. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 export async function sendOtpEmail(
   email: string,
   otp: string,
@@ -82,65 +178,35 @@ export async function sendOtpEmail(
     : "Password Reset Request";
   const subject = `[SXC Intersummit 2026] ${title}`;
 
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${title}</title>
-    </head>
-    <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b;">
-      <table width="100%" cellpadding="0" cellspacing="0" style="padding: 40px 15px;">
-        <tr>
-          <td align="center">
-            <table width="100%" max-width="520" cellpadding="0" cellspacing="0" style="max-width: 520px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0;">
-              <tr>
-                <td style="background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%); padding: 32px 24px; text-align: center;">
-                  <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700; letter-spacing: 0.5px;">SXC Intersummit 2026</h1>
-                  <p style="margin: 6px 0 0 0; color: #93c5fd; font-size: 14px;">StudentsxCEOs International Summit</p>
-                </td>
-              </tr>
-              <tr>
-                <td style="padding: 32px 28px;">
-                  <h2 style="margin: 0 0 16px 0; color: #0f172a; font-size: 18px; font-weight: 600;">Hello,</h2>
-                  <p style="margin: 0 0 24px 0; line-height: 1.6; color: #475569; font-size: 15px;">
-                    ${
-                      isRegister
-                        ? "Thank you for registering for <strong>StudentsxCEOs International Summit 2026</strong>. Use the following One-Time Password (OTP) to activate your account:"
-                        : "We received a request to reset your password for <strong>SXC Intersummit 2026</strong>. Use the following One-Time Password (OTP) to proceed:"
-                    }
-                  </p>
-                  
-                  <div style="text-align: center; margin: 30px 0;">
-                    <div style="display: inline-block; padding: 16px 36px; background-color: #f1f5f9; border: 2px dashed #3b82f6; border-radius: 10px; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #1e3a8a;">
-                      ${otp}
-                    </div>
-                  </div>
+  const contentHtml = `
+    <h2 style="margin: 0 0 16px 0; color: #0f172a; font-size: 18px; font-weight: 600;">Hello,</h2>
+    <p style="margin: 0 0 24px 0; line-height: 1.6; color: #475569; font-size: 15px;">
+      ${
+        isRegister
+          ? "Thank you for registering for <strong>StudentsxCEOs International Summit 2026</strong>. Use the following One-Time Password (OTP) to activate your account:"
+          : "We received a request to reset your password for <strong>SXC Intersummit 2026</strong>. Use the following One-Time Password (OTP) to proceed:"
+      }
+    </p>
+    
+    <div style="text-align: center; margin: 28px 0;">
+      <div style="display: inline-block; padding: 16px 36px; background-color: #f8fafc; border: 2px dashed #3b82f6; border-radius: 12px; font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #1e3a8a;">
+        ${otp}
+      </div>
+    </div>
 
-                  <p style="margin: 0 0 12px 0; line-height: 1.5; color: #64748b; font-size: 13px; text-align: center;">
-                    This OTP code is valid for <strong>5 minutes</strong>.
-                  </p>
-                  <p style="margin: 0; line-height: 1.5; color: #ef4444; font-size: 13px; text-align: center;">
-                    Do NOT share this code with anyone for your account security.
-                  </p>
-                </td>
-              </tr>
-              <tr>
-                <td style="background-color: #f8fafc; padding: 20px 24px; text-align: center; border-top: 1px solid #e2e8f0;">
-                  <p style="margin: 0; font-size: 12px; color: #94a3b8;">
-                    If you did not initiate this request, you can safely ignore this email.<br>
-                    &copy; 2026 StudentsxCEOs International Summit. All rights reserved.
-                  </p>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    </body>
-    </html>
+    <p style="margin: 0 0 10px 0; line-height: 1.5; color: #64748b; font-size: 13px; text-align: center;">
+      This OTP code is valid for <strong>5 minutes</strong>.
+    </p>
+    <p style="margin: 0; line-height: 1.5; color: #ef4444; font-size: 13px; text-align: center;">
+      Do NOT share this code with anyone for your account security.
+    </p>
   `;
+
+  const htmlContent = renderEmailTemplate({
+    title,
+    headerHeading: title,
+    contentHtml,
+  });
 
   return await sendMail({
     to: email,
@@ -152,20 +218,30 @@ export async function sendOtpEmail(
 
 export async function sendTestEmail(to: string) {
   const subject = "[SXC Intersummit 2026] Email Service Test";
-  const html = `
-    <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-      <h2 style="color: #1e3a8a;">SXC Intersummit 2026 - Email Engine Test</h2>
-      <p>Hello,</p>
-      <p>This is a test email to verify that the <strong>Email Service (Nodemailer)</strong> in the backend is operating normally.</p>
-      <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;" />
-      <p style="font-size: 12px; color: #777;">Sent at: ${new Date().toUTCString()}</p>
+  const title = "Email Service Test";
+
+  const contentHtml = `
+    <h2 style="margin: 0 0 16px 0; color: #0f172a; font-size: 18px; font-weight: 600;">Hello,</h2>
+    <p style="margin: 0 0 18px 0; line-height: 1.6; color: #475569; font-size: 15px;">
+      This is a test email to verify that the <strong>Email Service (Nodemailer)</strong> in the SXC Intersummit 2026 backend is operating normally.
+    </p>
+    <div style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 14px 18px; border-radius: 6px; margin: 20px 0;">
+      <p style="margin: 0; color: #166534; font-size: 14px; font-weight: 600;">Engine Status: Operational</p>
+      <p style="margin: 4px 0 0 0; color: #15803d; font-size: 13px;">Redesigned header with SXC Logo and brand gradient theme loaded successfully.</p>
     </div>
+    <p style="font-size: 12px; color: #94a3b8; margin: 20px 0 0 0;">Timestamp: ${new Date().toUTCString()}</p>
   `;
+
+  const htmlContent = renderEmailTemplate({
+    title,
+    headerHeading: "Email Engine Test",
+    contentHtml,
+  });
 
   return await sendMail({
     to,
     subject,
-    html,
+    html: htmlContent,
     text: "This is a test email from SXC Intersummit 2026 Backend.",
   });
 }
