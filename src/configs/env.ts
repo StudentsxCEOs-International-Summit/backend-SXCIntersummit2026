@@ -13,6 +13,13 @@ const envSchema = z
     JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
     JWT_EXPIRE: z.string().min(1).default("1h"),
     CORS_ORIGIN: z.string().optional(),
+    // Email / SMTP Configuration
+    SMTP_HOST: z.string().optional(),
+    SMTP_PORT: z.coerce.number().int().optional(),
+    SMTP_SECURE: z.coerce.boolean().optional(),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASS: z.string().optional(),
+    SMTP_FROM: z.string().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production" && !value.CORS_ORIGIN) {

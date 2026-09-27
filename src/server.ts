@@ -3,10 +3,14 @@ import cors from 'cors'
 import morgan from 'morgan'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
+import swaggerUi from 'swagger-ui-express'
 import { env } from './configs/env'
 import { errorHandler } from './middlewares/error.middleware'
 import { notFound } from './middlewares/not-found.middleware'
 import { apiRateLimiter } from './middlewares/rate-limiter.middleware'
+import { swaggerSpec, swaggerUiOptions } from './docs/swagger'
+import { startTokenCleanupJob } from './jobs/token-cleanup.job'
+import routes from './routes'
 
 const app = express()
 
@@ -14,7 +18,8 @@ app.set('trust proxy', true)
 
 app.use(
   helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: false,
   }),
 )
 
@@ -36,25 +41,39 @@ app.use(cookieParser())
 app.use(express.json({ limit: '2mb' }))
 app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 
+// Swagger Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions))
+app.get('/api-docs.json', (_req, res) => {
+  res.setHeader('Content-Type', 'application/json')
+  res.send(swaggerSpec)
+})
+
 app.use('/api', apiRateLimiter)
 
 app.get('/', (_req, res) => {
-  res.json({ message: 'API SXC Intersummit 2026 is running' })
+  res.json({
+    message: 'API SXC Intersummit 2026 is running',
+    docs: `${env.APP_URL}/api-docs`,
+  })
 })
 
-// Route is not ready yet
-// app.use('/api', routes)
+// API Routes
+app.use('/api', routes)
 
 // Fallback
 app.use(notFound)
 app.use(errorHandler)
 
 if (env.NODE_ENV !== 'test') {
+  startTokenCleanupJob()
+
   app.listen(env.PORT, () => {
     console.log(`API running at ${env.APP_URL}`)
+    console.log(`Swagger Docs available at ${env.APP_URL}/api-docs`)
     console.log(`NODE_ENV : ${env.NODE_ENV}`)
     console.log(`APP_ENV  : ${env.APP_ENV}`)
   })
 }
 
 export default app
+
