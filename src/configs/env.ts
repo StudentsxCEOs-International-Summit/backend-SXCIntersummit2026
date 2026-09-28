@@ -10,6 +10,7 @@ const envSchema = z
     APP_URL: z.string().url().default("http://localhost:3000"),
     PORT: z.coerce.number().int().positive().default(3000),
     DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+    DIRECT_URL: z.string().min(1, "DIRECT_URL is required"),
     JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
     JWT_EXPIRE: z.string().min(1).default("1h"),
     CORS_ORIGIN: z.string().optional(),
@@ -27,7 +28,8 @@ const envSchema = z
 type Env = z.infer<typeof envSchema>;
 
 const testEnvDefaults = {
-  DATABASE_URL: "mysql://root:password@localhost:3306/sxc_test",
+  DATABASE_URL: "postgresql://postgres:test@localhost:5432/sxc_test",
+  DIRECT_URL: "postgresql://postgres:test@localhost:5432/sxc_test",
   JWT_SECRET: "test_jwt_secret_with_at_least_32_characters_long",
   JWT_EXPIRE: "1h",
 };
