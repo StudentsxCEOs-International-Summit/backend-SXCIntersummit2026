@@ -671,3 +671,47 @@ enum regType {
   DAY2
   DAY1AND2
 }
+
+// ------------------------------------------------
+// NEW MODELS for IBCC features
+// ------------------------------------------------
+
+model AccessCode {
+  id        Int      @id @default(autoincrement())
+  teamId    Int
+  code      String   @unique
+  expiresAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id])
+}
+
+model SlideDeck {
+  id        Int      @id @default(autoincrement())
+  teamId    Int
+  fileUrl   String
+  uploadedAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id])
+}
+
+model SemifinalScore {
+  id        Int      @id @default(autoincrement())
+  teamId    Int
+  judgeId   Int      // staff id of judge
+  score     Float
+  comment   String?
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id])
+  judge Staff @relation(fields: [judgeId], references: [id])
+}
+
+model EmailLog {
+  id          Int      @id @default(autoincrement())
+  toEmail     String
+  subject     String
+  template    String
+  sentAt      DateTime @default(now())
+  status      String   // success / failed
+}
