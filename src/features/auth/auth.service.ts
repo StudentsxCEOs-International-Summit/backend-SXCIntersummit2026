@@ -1,8 +1,10 @@
+import crypto from 'crypto'
 import prisma from '../../configs/db'
 import { env } from '../../configs/env'
 import { hashPassword, comparePassword } from '../../utils/bcrypt'
 import { signToken, decodeToken } from '../../utils/jwt'
 import { sendOtpEmail } from '../../services/mail.service'
+import { GoogleUserInfo } from '../../services/google-auth.service'
 import { RegisterInput, OtpInput } from './auth.schema'
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000
@@ -323,5 +325,66 @@ export async function isTokenBlacklisted(token: string): Promise<boolean> {
   })
 
   return Boolean(record)
+}
+
+export async function authenticateWithGoogle(googleUser: GoogleUserInfo) {
+  const { id: googleId, email, name } = googleUser
+
+  let user = await prisma.user.findUnique({
+    where: { googleId },
+  })
+
+  if (!user) {
+    user = await prisma.user.findUnique({
+      where: { email },
+    })
+
+    if (user) {
+      user = await prisma.user.update({
+        where: { email },
+        data: { googleId },
+      })
+    } else {
+      const randomPassword = crypto.randomUUID()
+      const hashedPassword = await hashPassword(randomPassword)
+
+      user = await prisma.user.create({
+        data: {
+          googleId,
+          email,
+          name: name || 'Google User',
+          password: hashedPassword,
+          status: 1,
+          role: 'USER',
+        },
+      })
+    }
+  }
+
+  // Clear any existing pending verification for this email
+  await prisma.pendingUserVerification.deleteMany({
+    where: { email },
+  })
+
+  const token = signToken(
+    {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      accountType: 'user',
+    },
+    { expiresIn: env.JWT_EXPIRE as any },
+  )
+
+  return {
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    },
+    token,
+  }
 }
 
