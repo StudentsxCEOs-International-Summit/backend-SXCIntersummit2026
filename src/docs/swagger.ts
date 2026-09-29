@@ -37,6 +37,10 @@ REST API documentation for **SxC International Summit 2026** backend system.
       name: 'Auth - Session Management',
       description: 'Participant login, staff/admin login, token revocation (logout), and active user profile',
     },
+    {
+      name: 'Auth - Google OAuth',
+      description: 'Google OAuth 2.0 authentication flow (Authorization URL, callback handling, and token verification)',
+    },
   ],
   components: {
     securitySchemes: {
@@ -1050,6 +1054,93 @@ REST API documentation for **SxC International Summit 2026** backend system.
         },
       },
     },
+    '/api/auth/google': {
+      get: {
+        tags: ['Auth - Google OAuth'],
+        summary: 'Initiate Google OAuth Flow',
+        description: 'Redirects the user to Google OAuth consent page, or returns the authorization URL if requested with `?json=true` or `Accept: application/json`.',
+        parameters: [
+          {
+            name: 'state',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Optional state string or client redirect URI to preserve across OAuth handshake',
+          },
+          {
+            name: 'json',
+            in: 'query',
+            required: false,
+            schema: { type: 'boolean' },
+            description: 'Set to true to receive the Google consent URL as a JSON response instead of a 302 redirect',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Google OAuth authorization URL successfully generated.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Google OAuth authorization URL generated.' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        url: { type: 'string', example: 'https://accounts.google.com/o/oauth2/v2/auth?...' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          302: {
+            description: 'Direct redirect to Google OAuth login screen.',
+          },
+        },
+      },
+    },
+    '/api/auth/google/callback': {
+      get: {
+        tags: ['Auth - Google OAuth'],
+        summary: 'Google OAuth Callback Handler',
+        description: 'Endpoint invoked by Google redirect with authorization code. Exchanges code for user info, activates user session, and issues session cookie.',
+        parameters: [
+          {
+            name: 'code',
+            in: 'query',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Authorization code provided by Google OAuth',
+          },
+          {
+            name: 'state',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Optional redirect URL or state',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Authentication successful. User session established.',
+          },
+          302: {
+            description: 'Redirect to state URL if an HTTP redirect URL was provided.',
+          },
+          401: {
+            description: 'Google code exchange failed or unauthorized.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ApiErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
   },
 }
 
@@ -1075,6 +1166,30 @@ export const swaggerUiOptions = {
       border: 1px solid rgba(16, 185, 129, 0.4) !important;
       border-radius: 6px !important;
     }
+
+    /* Response 3xx Redirects (Yellow / Amber) */
+    .swagger-ui .responses-table tr.response[data-code^="3"] {
+      background: rgba(245, 158, 11, 0.12) !important;
+      border-left: 5px solid #f59e0b !important;
+    }
+    .swagger-ui .responses-table tr.response[data-code^="3"] .response-col_status {
+      color: #f59e0b !important;
+      font-weight: 700 !important;
+    }
+    .swagger-ui .responses-table tr.response[data-code^="3"] .response-col_status::before {
+      content: "● ";
+      color: #f59e0b;
+    }
+    .swagger-ui .response[data-code^="3"] .highlight-code,
+    .swagger-ui .response[data-code^="3"] pre.microlight {
+      background: #271c0c !important;
+      border: 1px solid rgba(245, 158, 11, 0.4) !important;
+      border-radius: 6px !important;
+    }
+    .swagger-ui .response[data-code^="3"] pre.microlight code {
+      color: #fde68a !important;
+    }
+
 
     /* Response 4xx & 5xx Errors (Red) */
     .swagger-ui .responses-table tr.response[data-code^="4"],

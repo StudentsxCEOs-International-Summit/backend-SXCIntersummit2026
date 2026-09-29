@@ -9,6 +9,7 @@ import {
   resendOtpSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  googleCallbackQuerySchema,
 } from './auth.schema'
 
 const authRouter = Router()
@@ -58,6 +59,15 @@ authRouter.post(
 authRouter.post('/logout', requireAuth, AuthController.logout)
 
 authRouter.get('/me', requireAuth, AuthController.getMe)
+
+// Google OAuth Endpoints
+authRouter.get('/google', AuthController.googleAuthRedirect)
+
+authRouter.get(
+  '/google/callback',
+  validateRequest({ query: googleCallbackQuerySchema }),
+  AuthController.googleAuthCallback,
+)
 
 export default authRouter
 

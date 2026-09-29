@@ -36,9 +36,19 @@ export const resetPasswordSchema = z.object({
   password: strongPasswordSchema,
 })
 
+export const googleCallbackQuerySchema = z
+  .object({
+    code: z.string().min(1, 'Authorization code is required'),
+    state: z.string().optional(),
+  })
+  .loose()
+
 export type RegisterInput = z.infer<typeof registerSchema>
 export type LoginInput = z.infer<typeof loginSchema>
 export type OtpInput = z.infer<typeof otpSchema>
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
+export type GoogleCallbackQuery = z.infer<typeof googleCallbackQuerySchema>
+
+
 
