@@ -5,8 +5,6 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
 // ─────────────────────────────────────────────
@@ -117,9 +115,10 @@ model Staff {
   divisionId Int
   createdAt  DateTime     @default(now())
 
-  divisions    Division       @relation(fields: [divisionId], references: [id])
+  divisions    Division         @relation(fields: [divisionId], references: [id])
   Notification Notification[]
   activity     activityLog[]
+  judgedScores SemifinalScore[]
 }
 
 model Division {
@@ -170,11 +169,14 @@ model Team {
   status    Int      @default(15)
   score     Float?
 
-  programcode    Program      @relation(fields: [programId], references: [id])
-  statuscode     status       @relation(fields: [status], references: [id])
-  leader         User         @relation("TeamLeader", fields: [leaderId], references: [id])
-  submissionTeam Submission[]
-  TeamMember     TeamMember[]
+  programcode     Program          @relation(fields: [programId], references: [id])
+  statuscode      status           @relation(fields: [status], references: [id])
+  leader          User             @relation("TeamLeader", fields: [leaderId], references: [id])
+  submissionTeam  Submission[]
+  TeamMember      TeamMember[]
+  accessCodes     AccessCode[]
+  slideDecks      SlideDeck[]
+  semifinalScores SemifinalScore[]
 }
 
 model status {
@@ -210,9 +212,9 @@ model SeminarReg {
   type         regType  @default(NONE)
   registeredAt DateTime @default(now())
 
-  user       User        @relation(fields: [userId], references: [id])
-  program    Program     @relation(fields: [programId], references: [id])
-  statuscode status?     @relation(fields: [status], references: [id])
+  user       User         @relation(fields: [userId], references: [id])
+  program    Program      @relation(fields: [programId], references: [id])
+  statuscode status?      @relation(fields: [status], references: [id])
   submission Submission[]
   addForm    addForm[]
 }
@@ -313,22 +315,22 @@ model TeamMember {
 }
 
 model addForm {
-  id               Int      @id @default(autoincrement())
-  userId           Int
-  programId        Int?
-  registrationId   Int
-  onTime           Boolean  @default(false)
-  wellOrganized    Boolean  @default(false)
-  practicalInsights Boolean @default(false)
-  interactiveSession Boolean @default(false)
-  other            String?
-  commitment       Boolean? @default(false)
-  consent          Boolean? @default(false)
-  concerns         String?
-  linkedin         String?
-  question         String?
-  specificMaterial String?
-  gpa              Float?
+  id                 Int      @id @default(autoincrement())
+  userId             Int
+  programId          Int?
+  registrationId     Int
+  onTime             Boolean  @default(false)
+  wellOrganized      Boolean  @default(false)
+  practicalInsights  Boolean  @default(false)
+  interactiveSession Boolean  @default(false)
+  other              String?
+  commitment         Boolean? @default(false)
+  consent            Boolean? @default(false)
+  concerns           String?
+  linkedin           String?
+  question           String?
+  specificMaterial   String?
+  gpa                Float?
 
   user         User       @relation(fields: [userId], references: [id])
   program      Program?   @relation(fields: [programId], references: [id])
@@ -350,331 +352,9 @@ model hearFrom {
   program Program? @relation(fields: [programId], references: [id])
 }
 
-model User {
-  id               Int            @id @default(autoincrement())
-  googleId         String?        @unique
-  name             String
-  email            String         @unique
-  password         String
-  birthdate        DateTime?
-  domicile         String?
-  institution_name String?
-  major            String?
-  wa_number        String?
-  line_id          String?
-  insta_acc        String?
-  institution      Institution?
-  status           Int            @default(1)
-  refreshToken     String?
-  createdAt        DateTime       @default(now())
-  role             String         @default("USER")
-  leadingTeam      Team[]         @relation("TeamLeader")
-  notification     Notification[]
-  tempIndividu     tempIndividu?
-  SeminarReg       SeminarReg[]
-  TeamMember       TeamMember[]
-  Submission       Submission[]
-  statuscode       status         @relation(fields: [status], references: [id])
-  referral         userReferral[] 
-  addForm          addForm[]
-  hearFrom        hearFrom[]
-
-
-  @@index([institution])
-  @@map("user")
-}
-
-model Staff {
-  id           Int            @id @default(autoincrement())
-  name         String
-  email        String         @unique
-  password     String
-  role         StaffRole
-  divisionId   Int
-  createdAt    DateTime       @default(now())
-  divisions    Division       @relation(fields: [divisionId], references: [id])
-  Notification Notification[]
-  activity     activityLog[]
-}
-
-model Division {
-  id       Int        @id @default(autoincrement())
-  name     String     @unique
-  staff    Staff[]
-}
-
-model activityLog{
-  id Int @id @default(autoincrement())
-  staffId Int
-  activity String
-  status   String
-  createdAt DateTime @default(now())
-
-  staff    Staff    @relation(fields: [staffId], references: [id])
-}
-
-model Notification {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  title     String
-  message   String
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now())
-  staffId   Int
-  purpose   purpose
-  user      User     @relation(fields: [userId], references: [id])
-  staff     Staff    @relation(fields: [staffId], references: [id])
-}
-
-model tempIndividu {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @unique
-  user      User     @relation(fields: [userId], references: [id])
-  createdAt DateTime @default(now())
-}
-
-model Team {
-  id             Int          @id @default(autoincrement())
-  name           String       @unique
-  code           String       @unique
-  createdAt      DateTime     @default(now())
-  leaderId       Int
-  programId      Int
-  status         Int          @default(15)
-  score          Float?
-  programcode    Program      @relation(fields: [programId], references: [id])
-  statuscode     status       @relation(fields: [status], references: [id])
-  leader         User         @relation("TeamLeader", fields: [leaderId], references: [id])
-  submissionTeam Submission[]
-  TeamMember     TeamMember[]
-}
-
-model status {
-  id          Int          @id @default(autoincrement())
-  code        String       @unique
-  description String
-  teams       Team[]
-  SeminarReg  SeminarReg[]
-  user        User[]
-
-  @@index([code])
-}
-
-model Program {
-  id            Int          @id @default(autoincrement())
-  name          String       @unique
-  type          Programtype
-  teams         Team[]
-  registrations SeminarReg[]
-  Submission    Submission[]
-  referral      programReferral[]
-  addForm       addForm[]
-  hearFrom      hearFrom[]
-}
-
-model SeminarReg {
-  id           Int          @id @default(autoincrement())
-  userId       Int
-  programId    Int
-  status       Int? @default(2)
-  type         regType      @default(NONE)
-  registeredAt DateTime     @default(now())
-  user         User         @relation(fields: [userId], references: [id])
-  program      Program      @relation(fields: [programId], references: [id])
-  statuscode   status?       @relation(fields: [status], references: [id])
-  submission   Submission[]
-  addForm      addForm[]
-}
-
-model Submission {
-  id           Int              @id @default(autoincrement())
-  seminarId    Int?
-  teamId       Int?
-  userId       Int?
-  stage        stages
-  event        String
-  type         submitType
-  programId    Int?
-  program      Program?         @relation(fields: [programId], references: [id])
-  submittedAt  DateTime         @default(now())
-  registration SeminarReg?      @relation(fields: [seminarId], references: [id])
-  teamcode     Team?            @relation(fields: [teamId], references: [id])
-  user         User?            @relation(fields: [userId], references: [id])
-  Files        SubmissionFile[]
-
-  @@index([stage])
-  @@index([type])
-}
-
-model SubmissionFile {
-  id           Int         @id @default(autoincrement())
-  submissionId Int?
-  fileType     String?
-  filePath     String // URL/path ke file di Google Drive atau storage lain
-  fileSize     Int? // optional ukuran file dalam bytes
-  gdriveId     String?
-  uploadedAt   DateTime    @default(now())
-  submission   Submission? @relation(fields: [submissionId], references: [id])
-}
-
-model PendingUserVerification {
-  id          Int       @id @default(autoincrement())
-  name        String?
-  email       String    @unique
-  password    String?
-  otp         String
-  otpSentAt   DateTime  @default(now())
-  otpTries    Int       @default(0)
-  purpose     String
-  
-}
-
-model referral {
-  id                      Int                       @id @default(autoincrement())
-  code                    String                    @unique
-  discount                 Int
-  validUntil               DateTime
-  createdAt               DateTime                  @default(now())
-  user                    userReferral[]
-  program                 programReferral[]
-}
-
-model blacklist {
-  id        Int      @id @default(autoincrement())
-  token     String   @unique @db.VarChar(500)
-  createdAt DateTime @default(now())
-  expiresAt DateTime
-}
-
-model addForm{
-  id Int @id @default(autoincrement())
-  userId Int
-  programId Int? 
-  registrationId Int
-  onTime Boolean @default(false)
-  wellOrganized Boolean @default(false)
-  practicalInsights Boolean @default(false)
-  interactiveSession Boolean @default(false)
-  other String?
-  commitment   Boolean?      @default(false)
-  consent     Boolean?      @default(false)
-  concerns String?
-  linkedin String?
-  question String?
-  specificMaterial String?
-  gpa Float?
-  user User @relation(fields: [userId], references: [id])
-  program Program? @relation(fields: [programId], references: [id])
-  registration SeminarReg @relation(fields: [registrationId], references: [id])
-}
-
-model hearFrom {
-  id Int @id @default(autoincrement())
-  userId Int
-  programId Int? 
-  instagram Boolean @default(false)
-  facebook Boolean @default(false)
-  twitter Boolean @default(false)
-  friends Boolean @default(false)
-  family Boolean @default(false)
-  other String?
-  user User @relation(fields: [userId], references: [id])
-  program Program? @relation(fields: [programId], references: [id])
-}
-
-
-model programReferral {
-  id Int @id @default(autoincrement())
-  programId Int
-  referralId Int
-  program Program @relation(fields: [programId], references: [id])
-  referral referral @relation(fields: [referralId], references: [id])
-
-  @@unique([programId, referralId])
-}
-model userReferral{
-  userId Int
-  referralId Int
-
-  user User @relation(fields: [userId], references: [id])
-  referral referral @relation(fields: [referralId], references: [id])
-
-  @@id([userId, referralId])
-}
-
-model TeamMember {
-  teamId Int
-  userId Int
-  role teamrole
-
-  team Team @relation(fields: [teamId], references: [id])
-  user User @relation(fields: [userId], references: [id])
-
-  @@id([teamId, userId])
-  @@map("teammember")
-}
-
-enum teamrole {
-  MEMBER
-  LEADER
-}
-
-enum stages {
-  REGISTRATION
-  PREELIM
-  SEMINAR
-  FINAL
-  SEMIFINAL
-}
-
-enum Institution {
-  UNIV
-  HSC
-}
-
-enum StaffRole {
-  ADMIN
-  BMC_ADMIN
-  BCL_ADMIN
-  IBCC_ADMIN
-  IBPC_ADMIN
-  CHAMBERS_ADMIN
-  COMPANY_VISIT_ADMIN
-  IC_ADMIN
-  PO
-}
-
-enum Programtype {
-  EVENT
-  COMPETITION
-}
-
-enum purpose {
-  NOTIFICATION @map("notification")
-  ANNOUNCEMENT @map("Announcement")
-}
-
-
-enum submitType {
-  IDCARD
-  PAYMENT
-  TASK
-  PROMOTION
-  CV
-}
-
-enum regType {
-  NONE
-  REGULAR
-  VIP
-  DAY1
-  DAY2
-  DAY1AND2
-}
-
-// ------------------------------------------------
-// NEW MODELS for IBCC features
-// ------------------------------------------------
+// ─────────────────────────────────────────────
+// IBCC MODELS
+// ─────────────────────────────────────────────
 
 model AccessCode {
   id        Int      @id @default(autoincrement())
@@ -687,9 +367,9 @@ model AccessCode {
 }
 
 model SlideDeck {
-  id        Int      @id @default(autoincrement())
-  teamId    Int
-  fileUrl   String
+  id         Int      @id @default(autoincrement())
+  teamId     Int
+  fileUrl    String
   uploadedAt DateTime @default(now())
 
   team Team @relation(fields: [teamId], references: [id])
@@ -698,20 +378,20 @@ model SlideDeck {
 model SemifinalScore {
   id        Int      @id @default(autoincrement())
   teamId    Int
-  judgeId   Int      // staff id of judge
+  judgeId   Int
   score     Float
   comment   String?
   createdAt DateTime @default(now())
 
-  team Team @relation(fields: [teamId], references: [id])
+  team  Team  @relation(fields: [teamId], references: [id])
   judge Staff @relation(fields: [judgeId], references: [id])
 }
 
 model EmailLog {
-  id          Int      @id @default(autoincrement())
-  toEmail     String
-  subject     String
-  template    String
-  sentAt      DateTime @default(now())
-  status      String   // success / failed
-}
+  id       Int      @id @default(autoincrement())
+  toEmail  String
+  subject  String
+  template String
+  sentAt   DateTime @default(now())
+  status   String
+}
