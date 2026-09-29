@@ -41,6 +41,26 @@ REST API documentation for **SxC International Summit 2026** backend system.
       name: 'Auth - Google OAuth',
       description: 'Google OAuth 2.0 authentication flow (Authorization URL, callback handling, and token verification)',
     },
+    {
+      name: 'Upload - File Submissions',
+      description: 'Upload payment proof (IBCC-06), requirement proof (twibbon/story), and semifinal slide deck (IBCC-09)',
+    },
+    {
+      name: 'Finance - Verification',
+      description: 'Admin verification of payment proofs (ADMIN-02) and requirement submissions',
+    },
+    {
+      name: 'Access Code - IBCC',
+      description: 'Generate access codes for semifinal (IBCC-07) and semifinal login with Team ID + Access Code (IBCC-08)',
+    },
+    {
+      name: 'Semifinal - Scoring & Results',
+      description: 'Semifinal scoring by judges (ADMIN-03), leaderboard, and result publishing with email notifications (IBCC-10)',
+    },
+    {
+      name: 'Config - Application',
+      description: 'Application configuration, registration deadline info, and email scheduler trigger',
+    },
   ],
   components: {
     securitySchemes: {
@@ -1054,6 +1074,9 @@ REST API documentation for **SxC International Summit 2026** backend system.
         },
       },
     },
+    // ═══════════════════════════════════════════
+    // GOOGLE OAUTH FLOW
+    // ═══════════════════════════════════════════
     '/api/auth/google': {
       get: {
         tags: ['Auth - Google OAuth'],
@@ -1141,6 +1164,492 @@ REST API documentation for **SxC International Summit 2026** backend system.
         },
       },
     },
+    // ═══════════════════════════════════════════
+    // UPLOAD — File Submissions
+    // ═══════════════════════════════════════════
+    '/api/upload/payment': {
+      post: {
+        tags: ['Upload - File Submissions'],
+        summary: 'Upload payment proof (IBCC-06)',
+        description: 'Uploads a payment proof image for a team. Accepted formats: JPG, PNG, WebP, GIF (max 5 MB).',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['file', 'teamId'],
+                properties: {
+                  file: { type: 'string', format: 'binary', description: 'Payment proof image file' },
+                  teamId: { type: 'integer', example: 1, description: 'Team ID' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Payment proof uploaded successfully.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } },
+          },
+          400: { description: 'Missing file or invalid teamId.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/upload/requirement': {
+      post: {
+        tags: ['Upload - File Submissions'],
+        summary: 'Upload requirement proof (twibbon / story)',
+        description: 'Uploads a twibbon or IG story screenshot as requirement proof. Accepted formats: JPG, PNG, WebP, GIF (max 5 MB).',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['file', 'teamId', 'type'],
+                properties: {
+                  file: { type: 'string', format: 'binary', description: 'Requirement proof image file' },
+                  teamId: { type: 'integer', example: 1 },
+                  type: { type: 'string', enum: ['twibbon', 'story'], example: 'twibbon' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Requirement proof uploaded successfully.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+          400: { description: 'Missing file, invalid teamId, or invalid type.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/upload/slides': {
+      post: {
+        tags: ['Upload - File Submissions'],
+        summary: 'Upload 5-slide deck (IBCC-09)',
+        description: 'Uploads a semifinal presentation deck. Accepted formats: PDF, PPT, PPTX, images (max 20 MB, max 5 slides).',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['file', 'teamId'],
+                properties: {
+                  file: { type: 'string', format: 'binary', description: 'Slide deck file (PDF or PPTX)' },
+                  teamId: { type: 'integer', example: 1 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Slide deck uploaded successfully.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+          400: { description: 'Missing file or invalid teamId.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    // ═══════════════════════════════════════════
+    // FINANCE — Verification
+    // ═══════════════════════════════════════════
+    '/api/finance/verify': {
+      post: {
+        tags: ['Finance - Verification'],
+        summary: 'Verify payment proof (ADMIN-02)',
+        description: 'Admin approves or rejects a team\'s payment proof. Triggers status change email notification.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['teamId', 'status'],
+                properties: {
+                  teamId: { type: 'integer', example: 1 },
+                  status: { type: 'string', enum: ['approved', 'rejected'], example: 'approved' },
+                  notes: { type: 'string', example: 'Payment amount matches registration fee.', description: 'Optional notes' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Payment verified successfully.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+          400: { description: 'Validation error.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiValidationErrorResponse' } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/finance/requirement/verify': {
+      post: {
+        tags: ['Finance - Verification'],
+        summary: 'Verify requirement submission (twibbon / story)',
+        description: 'Admin approves or rejects a team\'s requirement proof (twibbon or IG story). Triggers status change email notification.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['teamId', 'type', 'status'],
+                properties: {
+                  teamId: { type: 'integer', example: 1 },
+                  type: { type: 'string', enum: ['twibbon', 'story'], example: 'twibbon' },
+                  status: { type: 'string', enum: ['approved', 'rejected'], example: 'approved' },
+                  notes: { type: 'string', example: 'Clear twibbon screenshot verified.' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Requirement verified successfully.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+          400: { description: 'Validation error.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiValidationErrorResponse' } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    // ═══════════════════════════════════════════
+    // ACCESS CODE — IBCC
+    // ═══════════════════════════════════════════
+    '/api/access-code/generate': {
+      post: {
+        tags: ['Access Code - IBCC'],
+        summary: 'Generate access code for semifinal (IBCC-07)',
+        description: 'Admin generates an 8-character alphanumeric access code for a team to use in semifinal login. Previous codes for the team are expired.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['teamId'],
+                properties: {
+                  teamId: { type: 'integer', example: 1 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Access code generated successfully.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Access code generated successfully.' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        teamId: { type: 'integer', example: 1 },
+                        teamName: { type: 'string', example: 'Team Alpha' },
+                        accessCode: { type: 'string', example: 'A1B2C3D4' },
+                        expiresAt: { type: 'string', format: 'date-time' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/access-code/login': {
+      post: {
+        tags: ['Access Code - IBCC'],
+        summary: 'Semifinal login with Team ID + Access Code (IBCC-08)',
+        description: 'Authenticates a team for the semifinal stage using their team ID and the access code generated by an admin.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['teamId', 'accessCode'],
+                properties: {
+                  teamId: { type: 'integer', example: 1 },
+                  accessCode: { type: 'string', minLength: 8, maxLength: 8, example: 'A1B2C3D4' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Semifinal login successful.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Semifinal login successful.' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        team: {
+                          type: 'object',
+                          properties: {
+                            id: { type: 'integer', example: 1 },
+                            name: { type: 'string', example: 'Team Alpha' },
+                            status: { type: 'string', example: 'Qualified to Semifinal' },
+                            leader: {
+                              type: 'object',
+                              properties: {
+                                id: { type: 'integer', example: 1 },
+                                name: { type: 'string', example: 'John Doe' },
+                                email: { type: 'string', example: 'john@example.com' },
+                              },
+                            },
+                          },
+                        },
+                        accessCode: { type: 'string', example: 'A1B2C3D4' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Invalid or expired access code.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ApiErrorResponse' },
+                examples: {
+                  InvalidCode: { summary: 'Access code invalid or expired', value: { success: false, message: 'Invalid or expired access code.' } },
+                },
+              },
+            },
+          },
+          404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    // ═══════════════════════════════════════════
+    // SEMIFINAL — Scoring & Results
+    // ═══════════════════════════════════════════
+    '/api/semifinal/score': {
+      post: {
+        tags: ['Semifinal - Scoring & Results'],
+        summary: 'Submit or update a semifinal score (ADMIN-03)',
+        description: 'A judge submits a score (0–100) for a team. If the judge already scored this team, the score is updated.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['teamId', 'score'],
+                properties: {
+                  teamId: { type: 'integer', example: 1 },
+                  score: { type: 'number', minimum: 0, maximum: 100, example: 85.5 },
+                  comment: { type: 'string', maxLength: 500, example: 'Strong presentation and clear arguments.' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Score submitted successfully.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+          200: { description: 'Score updated successfully (already scored before).', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+          400: { description: 'Validation error.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiValidationErrorResponse' } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/semifinal/scores': {
+      get: {
+        tags: ['Semifinal - Scoring & Results'],
+        summary: 'Get semifinal leaderboard',
+        description: 'Returns all semifinal scores grouped by team with average scores, sorted descending.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        responses: {
+          200: {
+            description: 'Scores retrieved successfully.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Semifinal scores retrieved.' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        rankings: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              teamId: { type: 'integer', example: 1 },
+                              teamName: { type: 'string', example: 'Team Alpha' },
+                              average: { type: 'number', example: 87.5 },
+                              scores: {
+                                type: 'array',
+                                items: {
+                                  type: 'object',
+                                  properties: {
+                                    judgeId: { type: 'integer', example: 1 },
+                                    judgeName: { type: 'string', example: 'Judge A' },
+                                    score: { type: 'number', example: 85 },
+                                    comment: { type: 'string', nullable: true },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/semifinal/publish-results': {
+      post: {
+        tags: ['Semifinal - Scoring & Results'],
+        summary: 'Publish semifinal results & send emails (IBCC-10)',
+        description: 'Publishes the semifinal results by marking qualified teams (Top 5) and eliminated teams. Sends congratulatory/elimination emails to all team leaders.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['qualifiedTeamIds'],
+                properties: {
+                  qualifiedTeamIds: {
+                    type: 'array',
+                    items: { type: 'integer' },
+                    example: [1, 3, 5, 7, 9],
+                    description: 'Array of team IDs that qualified to the Final round',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Results published and emails queued.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Results published. 5 teams qualified, 10 teams eliminated. Emails are being sent.' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        qualified: { type: 'array', items: { type: 'integer' }, example: [1, 3, 5, 7, 9] },
+                        eliminated: { type: 'array', items: { type: 'integer' }, example: [2, 4, 6, 8, 10] },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Validation error.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiValidationErrorResponse' } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    // ═══════════════════════════════════════════
+    // CONFIG — Application
+    // ═══════════════════════════════════════════
+    '/api/config': {
+      get: {
+        tags: ['Config - Application'],
+        summary: 'Get application configuration',
+        description: 'Returns the current registration deadline, extended registration status, and slide upload limits.',
+        responses: {
+          200: {
+            description: 'Configuration retrieved.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Application configuration retrieved.' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        registrationOpen: { type: 'boolean', example: true },
+                        deadline: { type: 'string', format: 'date-time', example: '2026-11-15T16:59:59.000Z' },
+                        extendedRegistration: { type: 'boolean', example: false },
+                        maxSlidePages: { type: 'integer', example: 5 },
+                        maxSlideSizeMB: { type: 'integer', example: 20 },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/api/config/reload': {
+      post: {
+        tags: ['Config - Application'],
+        summary: 'Reload application configuration (Admin)',
+        description: 'Reloads the application configuration from environment variables. Useful after changing env vars without restarting.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        responses: {
+          200: { description: 'Configuration reloaded.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/config/trigger-emails': {
+      post: {
+        tags: ['Config - Application'],
+        summary: 'Trigger email scheduler manually',
+        description: 'Manually triggers the email scheduler to send deadline reminders and payment reminders. Can be used as a webhook endpoint for cronjob.org.',
+        responses: {
+          200: { description: 'Email scheduler triggered.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+        },
+      },
+    },
   },
 }
 
@@ -1167,6 +1676,7 @@ export const swaggerUiOptions = {
       border-radius: 6px !important;
     }
 
+
     /* Response 3xx Redirects (Yellow / Amber) */
     .swagger-ui .responses-table tr.response[data-code^="3"] {
       background: rgba(245, 158, 11, 0.12) !important;
@@ -1182,14 +1692,10 @@ export const swaggerUiOptions = {
     }
     .swagger-ui .response[data-code^="3"] .highlight-code,
     .swagger-ui .response[data-code^="3"] pre.microlight {
-      background: #271c0c !important;
+      background: #261d0d !important;
       border: 1px solid rgba(245, 158, 11, 0.4) !important;
       border-radius: 6px !important;
     }
-    .swagger-ui .response[data-code^="3"] pre.microlight code {
-      color: #fde68a !important;
-    }
-
 
     /* Response 4xx & 5xx Errors (Red) */
     .swagger-ui .responses-table tr.response[data-code^="4"],
