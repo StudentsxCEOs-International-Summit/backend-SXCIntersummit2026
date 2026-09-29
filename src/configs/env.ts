@@ -21,9 +21,13 @@ const envSchema = z
     SMTP_PASS: z.string().optional(),
     SMTP_FROM: z.string().optional(),
     EMAIL_LOGO_URL: z
-      .string()
       .url()
-      .default("https://lh3.googleusercontent.com/d/1OXwQyeaZm5IA3xApxh2DJcVmJ8XfcFzT"),
+      .default(
+        "https://lh3.googleusercontent.com/d/1OXwQyeaZm5IA3xApxh2DJcVmJ8XfcFzT",
+      ),
+    GOOGLE_CLIENT_ID: z.string().min(1, "GOOGLE_CLIENT_ID is required"),
+    GOOGLE_CLIENT_SECRET: z.string().min(1, "GOOGLE_CLIENT_SECRET is required"),
+    GOOGLE_REDIRECT_URI: z.url("GOOGLE_REDIRECT_URI must be a valid URL"),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production" && !value.CORS_ORIGIN) {
@@ -42,6 +46,9 @@ const testEnvDefaults = {
   DIRECT_URL: "postgresql://postgres:test@localhost:5432/sxc_test",
   JWT_SECRET: "test_jwt_secret_with_at_least_32_characters_long",
   JWT_EXPIRE: "1h",
+  GOOGLE_CLIENT_ID: "test_google_client_id",
+  GOOGLE_CLIENT_SECRET: "test_google_client_secret",
+  GOOGLE_REDIRECT_URI: "http://localhost:3000/api/auth/google/callback",
 };
 
 const rawEnv =
