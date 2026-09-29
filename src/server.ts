@@ -10,7 +10,9 @@ import { notFound } from './middlewares/not-found.middleware'
 import { apiRateLimiter } from './middlewares/rate-limiter.middleware'
 import { swaggerSpec, swaggerUiOptions } from './docs/swagger'
 import { startTokenCleanupJob } from './jobs/token-cleanup.job'
+import { startEmailSchedulerJob } from './jobs/email-scheduler.job'
 import routes from './routes'
+import path from 'path'
 
 const app = express()
 
@@ -39,7 +41,11 @@ app.use(
 
 app.use(cookieParser())
 app.use(express.json({ limit: '2mb' }))
+app.use(express.urlencoded({ extended: true }))
 app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'))
+
+// Serve uploaded files as static assets
+app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')))
 
 // Swagger Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions))
@@ -66,6 +72,7 @@ app.use(errorHandler)
 
 if (env.NODE_ENV !== 'test') {
   startTokenCleanupJob()
+  startEmailSchedulerJob()
 
   app.listen(env.PORT, () => {
     console.log(`API running at ${env.APP_URL}`)
