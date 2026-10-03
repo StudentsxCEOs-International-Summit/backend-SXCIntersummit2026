@@ -12,10 +12,8 @@ function generateCode(): string {
   return crypto.randomBytes(4).toString("hex").toUpperCase(); // 8 chars
 }
 
-// ─────────────────────────────────────────────
-// POST /access-code/generate  (IBCC-07)
+// POST /access-code/generate (IBCC-07)
 // Admin generates an access code for a team
-// ─────────────────────────────────────────────
 export async function generateAccessCode(req: AuthRequest, res: Response) {
   try {
     const { teamId } = req.body as { teamId: number };
@@ -59,10 +57,8 @@ export async function generateAccessCode(req: AuthRequest, res: Response) {
   }
 }
 
-// ─────────────────────────────────────────────
-// POST /access-code/login  (IBCC-08)
+// POST /access-code/login (IBCC-08)
 // Semifinal login with Team ID + Access Code
-// ─────────────────────────────────────────────
 export async function loginWithAccessCode(req: Request, res: Response) {
   try {
     const { teamId, accessCode } = req.body as {

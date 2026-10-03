@@ -1069,11 +1069,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
           },
         },
       },
-    },
-    // ═══════════════════════════════════════════
-    // UPLOAD — File Submissions
-    // ═══════════════════════════════════════════
-    '/api/upload/payment': {
+    },    // UPLOAD — File Submissions    '/api/upload/payment': {
       post: {
         tags: ['Upload - File Submissions'],
         summary: 'Upload payment proof (IBCC-06)',
@@ -1163,11 +1159,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
           404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
         },
       },
-    },
-    // ═══════════════════════════════════════════
-    // FINANCE — Verification
-    // ═══════════════════════════════════════════
-    '/api/finance/verify': {
+    },    // FINANCE — Verification    '/api/finance/verify': {
       post: {
         tags: ['Finance - Verification'],
         summary: 'Verify payment proof (ADMIN-02)',
@@ -1229,11 +1221,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
           404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
         },
       },
-    },
-    // ═══════════════════════════════════════════
-    // ACCESS CODE — IBCC
-    // ═══════════════════════════════════════════
-    '/api/access-code/generate': {
+    },    // ACCESS CODE — IBCC    '/api/access-code/generate': {
       post: {
         tags: ['Access Code - IBCC'],
         summary: 'Generate access code for semifinal (IBCC-07)',
@@ -1354,11 +1342,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
           404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
         },
       },
-    },
-    // ═══════════════════════════════════════════
-    // SEMIFINAL — Scoring & Results
-    // ═══════════════════════════════════════════
-    '/api/semifinal/score': {
+    },    // SEMIFINAL — Scoring & Results    '/api/semifinal/score': {
       post: {
         tags: ['Semifinal - Scoring & Results'],
         summary: 'Submit or update a semifinal score (ADMIN-03)',
@@ -1496,11 +1480,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
           403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
         },
       },
-    },
-    // ═══════════════════════════════════════════
-    // CONFIG — Application
-    // ═══════════════════════════════════════════
-    '/api/config': {
+    },    // CONFIG — Application    '/api/config': {
       get: {
         tags: ['Config - Application'],
         summary: 'Get application configuration',
