@@ -115,10 +115,10 @@ model Staff {
   divisionId Int
   createdAt  DateTime     @default(now())
 
-  divisions      Division         @relation(fields: [divisionId], references: [id])
-  Notification   Notification[]
-  activity       activityLog[]
-  SemifinalScore SemifinalScore[]
+  divisions    Division         @relation(fields: [divisionId], references: [id])
+  Notification Notification[]
+  activity     activityLog[]
+  judgedScores SemifinalScore[]
 }
 
 model Division {
@@ -169,14 +169,14 @@ model Team {
   status    Int      @default(15)
   score     Float?
 
-  programcode    Program          @relation(fields: [programId], references: [id])
-  statuscode     status           @relation(fields: [status], references: [id])
-  leader         User             @relation("TeamLeader", fields: [leaderId], references: [id])
-  submissionTeam Submission[]
-  TeamMember     TeamMember[]
-  AccessCode     AccessCode[]
-  SlideDeck      SlideDeck[]
-  SemifinalScore SemifinalScore[]
+  programcode     Program          @relation(fields: [programId], references: [id])
+  statuscode      status           @relation(fields: [status], references: [id])
+  leader          User             @relation("TeamLeader", fields: [leaderId], references: [id])
+  submissionTeam  Submission[]
+  TeamMember      TeamMember[]
+  accessCodes     AccessCode[]
+  slideDecks      SlideDeck[]
+  semifinalScores SemifinalScore[]
 }
 
 model status {
@@ -212,9 +212,9 @@ model SeminarReg {
   type         regType  @default(NONE)
   registeredAt DateTime @default(now())
 
-  user       User        @relation(fields: [userId], references: [id])
-  program    Program     @relation(fields: [programId], references: [id])
-  statuscode status?     @relation(fields: [status], references: [id])
+  user       User         @relation(fields: [userId], references: [id])
+  program    Program      @relation(fields: [programId], references: [id])
+  statuscode status?      @relation(fields: [status], references: [id])
   submission Submission[]
   addForm    addForm[]
 }
@@ -353,7 +353,7 @@ model hearFrom {
 }
 
 // ─────────────────────────────────────────────
-// NEW MODELS for IBCC features
+// IBCC MODELS
 // ─────────────────────────────────────────────
 
 model AccessCode {

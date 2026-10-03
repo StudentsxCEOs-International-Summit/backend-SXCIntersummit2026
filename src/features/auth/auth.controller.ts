@@ -5,6 +5,10 @@ import { AuthRequest } from '../../middlewares/auth.middleware'
 import { authCookieOptions, clearCookieOptions } from '../../configs/cookie'
 import * as authService from './auth.service'
 import {
+  getGoogleAuthUrl,
+  getGoogleUserFromCode,
+} from '../../services/google-auth.service'
+import {
   RegisterInput,
   LoginInput,
   OtpInput,
@@ -169,5 +173,53 @@ export async function logout(req: AuthRequest, res: Response) {
 
 export async function getMe(req: AuthRequest, res: Response) {
   return ok(res, { user: req.user }, 'Current user profile data.')
+}
+
+export async function googleAuthRedirect(req: Request, res: Response) {
+  try {
+    const state = req.query.state as string | undefined
+    const url = getGoogleAuthUrl(state)
+
+    if (req.query.json === 'true' || req.headers.accept?.includes('application/json')) {
+      return ok(res, { url }, 'Google OAuth authorization URL generated.')
+    }
+
+    return res.redirect(url)
+  } catch (error: any) {
+    return badRequest(res, error.message)
+  }
+}
+
+export async function googleAuthCallback(req: Request, res: Response) {
+  try {
+    const code = req.query.code as string | undefined
+    const state = req.query.state as string | undefined
+
+    if (!code) {
+      return badRequest(res, 'Authorization code is missing from Google callback.')
+    }
+
+    const googleUser = await getGoogleUserFromCode(code)
+    const result = await authService.authenticateWithGoogle(googleUser)
+
+    res.cookie('token', result.token, authCookieOptions)
+
+    if (state && typeof state === 'string' && state.startsWith('http')) {
+      const redirectUrl = new URL(state)
+      redirectUrl.searchParams.set('token', result.token)
+      return res.redirect(redirectUrl.toString())
+    }
+
+    return ok(
+      res,
+      {
+        user: result.user,
+        token: result.token,
+      },
+      'Google authentication successful.',
+    )
+  } catch (error: any) {
+    return unauthorized(res, error.message)
+  }
 }
 

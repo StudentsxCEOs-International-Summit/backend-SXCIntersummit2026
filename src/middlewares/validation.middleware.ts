@@ -29,8 +29,22 @@ export function validateRequest(schema: SchemaMap) {
     }
 
     if (result.body?.success) req.body = result.body.data
-    if (result.query?.success) req.query = result.query.data as typeof req.query
-    if (result.params?.success) req.params = result.params.data as typeof req.params
+    if (result.query?.success) {
+      Object.defineProperty(req, 'query', {
+        value: result.query.data,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      })
+    }
+    if (result.params?.success) {
+      Object.defineProperty(req, 'params', {
+        value: result.params.data,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      })
+    }
 
     return next()
   }
