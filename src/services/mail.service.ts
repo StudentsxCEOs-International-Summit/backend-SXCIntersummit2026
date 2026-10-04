@@ -80,13 +80,13 @@ export async function sendMail(
   }
 }
 
-interface EmailLayoutOptions {
+export interface EmailLayoutOptions {
   title: string;
   headerHeading?: string;
   contentHtml: string;
 }
 
-function renderEmailTemplate({
+export function renderEmailTemplate({
   title,
   headerHeading,
   contentHtml,

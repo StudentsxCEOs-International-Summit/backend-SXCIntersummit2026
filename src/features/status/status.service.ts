@@ -78,6 +78,8 @@ export async function sendSemifinalResultEmails(
     include: { leader: true },
   });
 
+  const emailLogs: any[] = [];
+
   for (const team of teams) {
     if (!team.leader?.email) continue;
 
@@ -99,16 +101,20 @@ export async function sendSemifinalResultEmails(
     try {
       const result = await sendMail({ to: team.leader.email, subject, html });
 
-      await prisma.emailLog.create({
-        data: {
-          toEmail: team.leader.email,
-          subject,
-          template: isQualified ? "semifinal_qualified" : "semifinal_eliminated",
-          status: result.success ? "success" : "failed",
-        },
+      emailLogs.push({
+        toEmail: team.leader.email,
+        subject,
+        template: isQualified ? "semifinal_qualified" : "semifinal_eliminated",
+        status: result.success ? "success" : "failed",
       });
     } catch (err: any) {
       console.error(`[STATUS] Failed to send semifinal email to ${team.leader.email}:`, err.message);
     }
+  }
+
+  if (emailLogs.length > 0) {
+    await prisma.emailLog.createMany({
+      data: emailLogs,
+    });
   }
 }

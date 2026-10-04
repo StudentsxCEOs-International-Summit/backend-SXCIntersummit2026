@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import prisma from "../configs/db";
-import { sendMail } from "../services/mail.service";
+import { sendMail, renderEmailTemplate } from "../services/mail.service";
 import { getAppConfig, isRegistrationOpen, getEffectiveDeadline } from "../configs/appConfig";
 
 /**
@@ -57,13 +57,20 @@ async function sendDeadlineReminders() {
     if (!team.leader?.email) continue;
 
     try {
+      const html = renderEmailTemplate({
+        title: "Registration Deadline Reminder",
+        contentHtml: `
+          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 16px;">Hi <strong>${team.leader.name}</strong>,</p>
+          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">This is a reminder that the registration deadline for <strong>SXC International Summit 2026</strong> is in <strong>${daysUntilDeadline} day(s)</strong> (${deadline.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}).</p>
+          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">Please ensure all required documents and payment are submitted before the deadline.</p>
+          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 0;">Best regards,<br><strong>StudentsxCEOs International Summit 2026 Team</strong></p>
+        `
+      });
+
       await sendMail({
         to: team.leader.email,
         subject: `[SXC Intersummit 2026] ⏰ Registration Deadline Reminder – ${daysUntilDeadline} day(s) left!`,
-        html: `<p>Hi ${team.leader.name},</p>
-<p>This is a reminder that the registration deadline for <strong>SXC International Summit 2026</strong> is in <strong>${daysUntilDeadline} day(s)</strong> (${deadline.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}).</p>
-<p>Please ensure all required documents and payment are submitted before the deadline.</p>
-<p>Best regards,<br>StudentsxCEOs International Summit 2026 Team</p>`,
+        html,
         text: `Hi ${team.leader.name}, registration deadline is in ${daysUntilDeadline} day(s). Please complete your submission.`,
       });
 
@@ -118,13 +125,20 @@ async function sendPaymentReminders() {
     if (recentEmail) continue; // Skip – already reminded today
 
     try {
+      const html = renderEmailTemplate({
+        title: "Payment Reminder",
+        contentHtml: `
+          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 16px;">Hi <strong>${team.leader.name}</strong>,</p>
+          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">We noticed that your team <strong>${team.name}</strong> has not yet submitted payment proof for <strong>SXC International Summit 2026</strong>.</p>
+          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">Please upload your payment proof as soon as possible to complete your registration.</p>
+          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 0;">Best regards,<br><strong>StudentsxCEOs International Summit 2026 Team</strong></p>
+        `
+      });
+
       await sendMail({
         to: team.leader.email,
         subject: `[SXC Intersummit 2026] 💳 Payment Reminder – ${team.name}`,
-        html: `<p>Hi ${team.leader.name},</p>
-<p>We noticed that your team <strong>${team.name}</strong> has not yet submitted payment proof for <strong>SXC International Summit 2026</strong>.</p>
-<p>Please upload your payment proof as soon as possible to complete your registration.</p>
-<p>Best regards,<br>StudentsxCEOs International Summit 2026 Team</p>`,
+        html,
         text: `Hi ${team.leader.name}, please upload payment proof for team ${team.name}.`,
       });
 

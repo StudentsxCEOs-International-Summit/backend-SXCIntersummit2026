@@ -4,10 +4,8 @@ import { ok, badRequest, internalError, notFound } from "../../utils/response";
 import { AuthRequest } from "../../middlewares/auth.middleware";
 import { notifyStatusChange } from "../status/status.service";
 
-// ─────────────────────────────────────────────
-// POST /finance/verify  (ADMIN-02)
+// POST /finance/verify (ADMIN-02)
 // Verify payment proof submitted by a team
-// ─────────────────────────────────────────────
 export async function verifyPayment(req: AuthRequest, res: Response) {
   try {
     const { teamId, status, notes } = req.body as {
@@ -66,10 +64,8 @@ export async function verifyPayment(req: AuthRequest, res: Response) {
   }
 }
 
-// ─────────────────────────────────────────────
 // POST /finance/requirement/verify
 // Verify requirement (twibbon/story) submission
-// ─────────────────────────────────────────────
 export async function verifyRequirement(req: AuthRequest, res: Response) {
   try {
     const { teamId, type, status, notes } = req.body as {
