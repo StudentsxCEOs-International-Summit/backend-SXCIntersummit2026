@@ -4,10 +4,8 @@ import { ok, badRequest, internalError, notFound } from "../../utils/response";
 import { AuthRequest } from "../../middlewares/auth.middleware";
 import { sendSemifinalResultEmails } from "../status/status.service";
 
-// ─────────────────────────────────────────────
-// POST /semifinal/score  (ADMIN-03)
+// POST /semifinal/score (ADMIN-03)
 // Judge submits a score for a team
-// ─────────────────────────────────────────────
 export async function submitScore(req: AuthRequest, res: Response) {
   try {
     const { teamId, score, comment } = req.body as {
@@ -63,10 +61,8 @@ export async function submitScore(req: AuthRequest, res: Response) {
   }
 }
 
-// ─────────────────────────────────────────────
 // GET /semifinal/scores
-// Get all semifinal scores grouped by team
-// ─────────────────────────────────────────────
+// Scores grouped by team with averages
 export async function getScores(req: AuthRequest, res: Response) {
   try {
     const scores = await prisma.semifinalScore.findMany({
@@ -117,10 +113,8 @@ export async function getScores(req: AuthRequest, res: Response) {
   }
 }
 
-// ─────────────────────────────────────────────
-// POST /semifinal/publish-results  (IBCC-10)
-// Publish semifinal results & send emails
-// ─────────────────────────────────────────────
+// POST /semifinal/publish-results (IBCC-10)
+// Publish results and send notification emails
 export async function publishResults(req: AuthRequest, res: Response) {
   try {
     const { qualifiedTeamIds } = req.body as { qualifiedTeamIds: number[] };

@@ -44,10 +44,8 @@ app.use(express.json({ limit: '2mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 
-// Serve uploaded files as static assets
 app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')))
 
-// Swagger Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions))
 app.get('/api-docs.json', (_req, res) => {
   res.setHeader('Content-Type', 'application/json')
@@ -63,10 +61,8 @@ app.get('/', (_req, res) => {
   })
 })
 
-// API Routes
 app.use('/api', routes)
 
-// Fallback
 app.use(notFound)
 app.use(errorHandler)
 

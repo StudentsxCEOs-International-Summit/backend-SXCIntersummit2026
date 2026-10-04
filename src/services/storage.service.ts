@@ -3,9 +3,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 
-// ─────────────────────────────────────────────
-// STORAGE CONFIG
-// ─────────────────────────────────────────────
+
 
 const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
 
@@ -16,9 +14,7 @@ function ensureDir(dir: string) {
   }
 }
 
-// ─────────────────────────────────────────────
-// MULTER DISK STORAGE
-// ─────────────────────────────────────────────
+
 
 function createDiskStorage(subfolder: string) {
   return multer.diskStorage({
@@ -35,9 +31,7 @@ function createDiskStorage(subfolder: string) {
   });
 }
 
-// ─────────────────────────────────────────────
-// FILE FILTER
-// ─────────────────────────────────────────────
+
 
 const ALLOWED_IMAGE_TYPES = [
   "image/jpeg",
@@ -81,9 +75,7 @@ function docFilter(
   }
 }
 
-// ─────────────────────────────────────────────
-// PRE-CONFIGURED MULTER INSTANCES
-// ─────────────────────────────────────────────
+
 
 /** Upload payment proof (images only, max 5 MB) */
 export const uploadPayment = multer({
@@ -106,9 +98,7 @@ export const uploadSlides = multer({
   limits: { fileSize: 20 * 1024 * 1024 },
 });
 
-// ─────────────────────────────────────────────
-// UTILITY: build a public URL from a saved file
-// ─────────────────────────────────────────────
+
 
 export function fileToPublicUrl(file: Express.Multer.File): string {
   // Relative path from project root, normalised to forward slashes

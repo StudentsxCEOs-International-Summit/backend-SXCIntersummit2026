@@ -3,9 +3,7 @@ import prisma from "../../configs/db";
 import { ok, badRequest, internalError, notFound } from "../../utils/response";
 import { fileToPublicUrl } from "../../services/storage.service";
 
-// ─────────────────────────────────────────────
-// POST /upload/payment  (IBCC-06)
-// ─────────────────────────────────────────────
+// POST /upload/payment (IBCC-06)
 export async function uploadPaymentProof(req: Request, res: Response) {
   try {
     const file = req.file;
@@ -43,9 +41,7 @@ export async function uploadPaymentProof(req: Request, res: Response) {
   }
 }
 
-// ─────────────────────────────────────────────
-// POST /upload/requirement  (twibbon / story)
-// ─────────────────────────────────────────────
+// POST /upload/requirement (twibbon / story)
 export async function uploadRequirementProof(req: Request, res: Response) {
   try {
     const file = req.file;
@@ -84,9 +80,7 @@ export async function uploadRequirementProof(req: Request, res: Response) {
   }
 }
 
-// ─────────────────────────────────────────────
-// POST /upload/slides  (IBCC-09)
-// ─────────────────────────────────────────────
+// POST /upload/slides (IBCC-09)
 export async function uploadSlideDeck(req: Request, res: Response) {
   try {
     const file = req.file;
