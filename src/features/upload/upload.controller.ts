@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../../configs/db";
 import { ok, badRequest, internalError, notFound } from "../../utils/response";
-import { fileToPublicUrl } from "../../services/storage.service";
+import { uploadFileToDrive } from "../../services/storage.service";
 
 // POST /upload/payment (IBCC-06)
 export async function uploadPaymentProof(req: Request, res: Response) {
@@ -15,7 +15,7 @@ export async function uploadPaymentProof(req: Request, res: Response) {
     const team = await prisma.team.findUnique({ where: { id: teamId } });
     if (!team) return notFound(res, "Team not found.");
 
-    const fileUrl = fileToPublicUrl(file);
+    const fileUrl = await uploadFileToDrive(file);
 
     const submission = await prisma.submission.create({
       data: {
@@ -54,7 +54,7 @@ export async function uploadRequirementProof(req: Request, res: Response) {
     const team = await prisma.team.findUnique({ where: { id: teamId } });
     if (!team) return notFound(res, "Team not found.");
 
-    const fileUrl = fileToPublicUrl(file);
+    const fileUrl = await uploadFileToDrive(file);
 
     const submission = await prisma.submission.create({
       data: {
@@ -92,7 +92,7 @@ export async function uploadSlideDeck(req: Request, res: Response) {
     const team = await prisma.team.findUnique({ where: { id: teamId } });
     if (!team) return notFound(res, "Team not found.");
 
-    const fileUrl = fileToPublicUrl(file);
+    const fileUrl = await uploadFileToDrive(file);
 
     // Save to SlideDeck model
     const slideDeck = await prisma.slideDeck.create({

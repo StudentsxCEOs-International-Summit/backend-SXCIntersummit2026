@@ -28,6 +28,8 @@ const envSchema = z
     GOOGLE_CLIENT_ID: z.string().min(1, "GOOGLE_CLIENT_ID is required"),
     GOOGLE_CLIENT_SECRET: z.string().min(1, "GOOGLE_CLIENT_SECRET is required"),
     GOOGLE_REDIRECT_URI: z.url("GOOGLE_REDIRECT_URI must be a valid URL"),
+    GOOGLE_DRIVE_CREDENTIALS_BASE64: z.string().optional(),
+    GOOGLE_DRIVE_FOLDER_ID: z.string().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production" && !value.CORS_ORIGIN) {

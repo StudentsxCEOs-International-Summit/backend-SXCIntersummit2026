@@ -1,44 +1,91 @@
 import multer from "multer";
-import path from "path";
-import fs from "fs";
+import { google } from "googleapis";
+import { Readable } from "stream";
+import { env } from "../configs/env";
 import crypto from "crypto";
+import path from "path";
 
+// Initialize Google Drive API Client
+let driveClient: any = null;
 
+function getDriveClient() {
+  if (driveClient) return driveClient;
 
-const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
+  if (!env.GOOGLE_DRIVE_CREDENTIALS_BASE64) {
+    console.warn(
+      "[STORAGE] GOOGLE_DRIVE_CREDENTIALS_BASE64 is not set. Google Drive uploads will fail or be mocked."
+    );
+    return null;
+  }
 
-/** Ensure the upload directory tree exists */
-function ensureDir(dir: string) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  try {
+    const credentialsJson = Buffer.from(env.GOOGLE_DRIVE_CREDENTIALS_BASE64, "base64").toString("utf-8");
+    const credentials = JSON.parse(credentialsJson);
+
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ["https://www.googleapis.com/auth/drive.file"],
+    });
+
+    driveClient = google.drive({ version: "v3", auth });
+    return driveClient;
+  } catch (error: any) {
+    console.error("[STORAGE] Failed to initialize Google Drive client:", error.message);
+    return null;
   }
 }
 
+/**
+ * Uploads a file buffer to Google Drive and returns the web view link.
+ */
+export async function uploadFileToDrive(file: Express.Multer.File): Promise<string> {
+  const drive = getDriveClient();
+  
+  if (!drive) {
+    console.warn("[STORAGE MOCK] Simulating upload to Google Drive for:", file.originalname);
+    return `https://mock-drive.google.com/file/${Date.now()}`;
+  }
 
+  const folderId = env.GOOGLE_DRIVE_FOLDER_ID;
+  const ext = path.extname(file.originalname);
+  const uniqueName = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}${ext}`;
 
-function createDiskStorage(subfolder: string) {
-  return multer.diskStorage({
-    destination(_req, _file, cb) {
-      const dest = path.join(UPLOAD_DIR, subfolder);
-      ensureDir(dest);
-      cb(null, dest);
-    },
-    filename(_req, file, cb) {
-      const ext = path.extname(file.originalname);
-      const uniqueName = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}${ext}`;
-      cb(null, uniqueName);
-    },
-  });
+  const fileMetadata = {
+    name: uniqueName,
+    parents: folderId ? [folderId] : undefined,
+  };
+
+  const media = {
+    mimeType: file.mimetype,
+    body: Readable.from(file.buffer),
+  };
+
+  try {
+    const response = await drive.files.create({
+      requestBody: fileMetadata,
+      media: media,
+      fields: "id, webViewLink",
+    });
+
+    // Make the file publicly accessible
+    if (response.data.id) {
+      await drive.permissions.create({
+        fileId: response.data.id,
+        requestBody: {
+          role: "reader",
+          type: "anyone",
+        },
+      });
+    }
+
+    return response.data.webViewLink || "";
+  } catch (error: any) {
+    console.error("[STORAGE] Upload to Google Drive failed:", error.message);
+    throw new Error("Failed to upload file to Google Drive");
+  }
 }
 
-
-
-const ALLOWED_IMAGE_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-];
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 const ALLOWED_DOC_TYPES = [
   "application/pdf",
@@ -47,11 +94,7 @@ const ALLOWED_DOC_TYPES = [
   ...ALLOWED_IMAGE_TYPES,
 ];
 
-function imageFilter(
-  _req: Express.Request,
-  file: Express.Multer.File,
-  cb: multer.FileFilterCallback,
-) {
+function imageFilter(_req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) {
   if (ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
     cb(null, true);
   } else {
@@ -59,62 +102,34 @@ function imageFilter(
   }
 }
 
-function docFilter(
-  _req: Express.Request,
-  file: Express.Multer.File,
-  cb: multer.FileFilterCallback,
-) {
+function docFilter(_req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) {
   if (ALLOWED_DOC_TYPES.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(
-      new Error(
-        `Only PDF, PPT/PPTX, and image files are allowed. Received: ${file.mimetype}`,
-      ),
-    );
+    cb(new Error(`Only PDF, PPT/PPTX, and image files are allowed. Received: ${file.mimetype}`));
   }
 }
 
-
+// We use memoryStorage so we can stream the buffer directly to Google Drive
+const memoryStorage = multer.memoryStorage();
 
 /** Upload payment proof (images only, max 5 MB) */
 export const uploadPayment = multer({
-  storage: createDiskStorage("payment"),
+  storage: memoryStorage,
   fileFilter: imageFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
 /** Upload requirement proof – twibbon / IG story screenshot (images only, max 5 MB) */
 export const uploadRequirement = multer({
-  storage: createDiskStorage("requirement"),
+  storage: memoryStorage,
   fileFilter: imageFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
 /** Upload slide deck (PDF / PPTX, max 20 MB) */
 export const uploadSlides = multer({
-  storage: createDiskStorage("slides"),
+  storage: memoryStorage,
   fileFilter: docFilter,
   limits: { fileSize: 20 * 1024 * 1024 },
 });
-
-
-
-export function fileToPublicUrl(file: Express.Multer.File): string {
-  // Relative path from project root, normalised to forward slashes
-  const relative = path
-    .relative(process.cwd(), file.path)
-    .replace(/\\/g, "/");
-  return `/${relative}`;
-}
-
-/** Delete a file from disk (fire-and-forget) */
-export function deleteFile(filePath: string) {
-  const absolute = path.isAbsolute(filePath)
-    ? filePath
-    : path.resolve(process.cwd(), filePath.replace(/^\//, ""));
-
-  fs.unlink(absolute, (err) => {
-    if (err) console.warn(`[STORAGE] Could not delete ${absolute}:`, err.message);
-  });
-}
