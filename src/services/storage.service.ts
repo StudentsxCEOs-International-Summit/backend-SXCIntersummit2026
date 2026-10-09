@@ -98,6 +98,24 @@ export const uploadSlides = multer({
   limits: { fileSize: 20 * 1024 * 1024 },
 });
 
+export const uploadRegistrationRequirements = multer({
+  storage: createDiskStorage("registration"),
+  fileFilter: docFilter,
+  limits: { fileSize: 10 * 1024 * 1024 },
+}).fields([
+  { name: "ktm_file", maxCount: 1 },
+  { name: "follow_proof", maxCount: 1 },
+  { name: "twibbon_proof", maxCount: 1 },
+  { name: "poster_proof", maxCount: 1 },
+  { name: "broadcast_proof", maxCount: 1 },
+]);
+
+export const uploadPreliminarySlideDeck = multer({
+  storage: createDiskStorage("preliminary"),
+  fileFilter: docFilter,
+  limits: { fileSize: 15 * 1024 * 1024 },
+}).single("slideDeck");
+
 
 
 export function fileToPublicUrl(file: Express.Multer.File): string {

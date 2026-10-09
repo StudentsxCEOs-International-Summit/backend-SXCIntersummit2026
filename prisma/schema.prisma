@@ -68,6 +68,13 @@ enum purpose {
   ANNOUNCEMENT @map("Announcement")
 }
 
+enum TeamCodeStatus {
+  AVAILABLE
+  RESERVED
+  ASSIGNED
+  RETIRED
+}
+
 // ─────────────────────────────────────────────
 // MODELS
 // ─────────────────────────────────────────────
@@ -101,6 +108,7 @@ model User {
   referral     userReferral[]
   addForm      addForm[]
   hearFrom     hearFrom[]
+  invitations  TeamMemberInvitation[]
 
   @@index([institution])
   @@map("user")
@@ -166,17 +174,21 @@ model Team {
   createdAt DateTime @default(now())
   leaderId  Int
   programId Int
-  status    Int      @default(15)
-  score     Float?
+  status            Int                    @default(15)
+  score             Float?
+  memberComposition String?
+  sourceInfo        String?
 
-  programcode     Program          @relation(fields: [programId], references: [id])
-  statuscode      status           @relation(fields: [status], references: [id])
-  leader          User             @relation("TeamLeader", fields: [leaderId], references: [id])
+  programcode     Program                @relation(fields: [programId], references: [id])
+  statuscode      status                 @relation(fields: [status], references: [id])
+  leader          User                   @relation("TeamLeader", fields: [leaderId], references: [id])
   submissionTeam  Submission[]
   TeamMember      TeamMember[]
   accessCodes     AccessCode[]
   slideDecks      SlideDeck[]
   semifinalScores SemifinalScore[]
+  masterTeamCode  MasterTeamCode?
+  invitations     TeamMemberInvitation[]
 }
 
 model status {
@@ -303,9 +315,11 @@ model blacklist {
 }
 
 model TeamMember {
-  teamId Int
-  userId Int
-  role   teamrole
+  teamId      Int
+  userId      Int
+  role        teamrole
+  institution String?
+  yearOfStudy String?
 
   team Team @relation(fields: [teamId], references: [id])
   user User @relation(fields: [userId], references: [id])
@@ -394,4 +408,37 @@ model EmailLog {
   template String
   sentAt   DateTime @default(now())
   status   String
+}
+
+model MasterTeamCode {
+  id         Int            @id @default(autoincrement())
+  code       String         @unique @db.VarChar(10)
+  status     TeamCodeStatus @default(AVAILABLE)
+  teamId     Int?           @unique
+  reservedAt DateTime?
+  assignedAt DateTime?
+
+  team Team? @relation(fields: [teamId], references: [id])
+
+  @@index([status])
+  @@map("master_team_code")
+}
+
+model TeamMemberInvitation {
+  id        Int       @id @default(autoincrement())
+  teamId    Int
+  userId    Int
+  email     String
+  token     String    @unique
+  code      String
+  expiresAt DateTime
+  isClaimed Boolean   @default(false)
+  claimedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  team Team @relation(fields: [teamId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([email])
+  @@map("team_member_invitation")
 }
