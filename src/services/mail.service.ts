@@ -80,17 +80,31 @@ export async function sendMail(
   }
 }
 
+const DEFAULT_EMAIL_HEADER_BANNER =
+  "https://lh3.googleusercontent.com/d/1edkvpTlvJHNLjjYl-VZEZRDnu9B3TnYv";
+const DEFAULT_EMAIL_LOGO =
+  "https://lh3.googleusercontent.com/d/1OXwQyeaZm5IA3xApxh2DJcVmJ8XfcFzT";
+
 export interface EmailLayoutOptions {
   title: string;
   headerHeading?: string;
   contentHtml: string;
+  bannerUrl?: string;
+  logoUrl?: string;
+  footerNote?: string;
 }
 
 export function renderEmailTemplate({
   title,
   headerHeading,
   contentHtml,
+  bannerUrl = env.EMAIL_HEADER_BANNER_URL || DEFAULT_EMAIL_HEADER_BANNER,
+  logoUrl = env.EMAIL_LOGO_URL || DEFAULT_EMAIL_LOGO,
+  footerNote,
 }: EmailLayoutOptions): string {
+  const resolvedBannerUrl = bannerUrl.trim();
+  const resolvedLogoUrl = logoUrl.trim();
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -103,49 +117,33 @@ export function renderEmailTemplate({
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f1f5f9; padding: 36px 12px;">
     <tr>
       <td align="center">
-        <!-- Main Card Container -->
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 560px; width: 100%; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04); border: 1px solid #e2e8f0;">
-          
-          <!-- Redesigned Header: SXC Brand Deep Gradient + Logo + Badge + Gold Accent -->
           <tr>
-            <td style="background-color: #0b1536; background: linear-gradient(145deg, #091129 0%, #172554 45%, #1e3a8a 80%, #2563eb 100%); padding: 36px 24px 28px 24px; text-align: center; border-bottom: 3px solid #f59e0b;">
-              
-              <!-- SXC Logo from Hosted Image URL -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td align="center">
-                    <img src="${env.EMAIL_LOGO_URL}" alt="SXC International Summit Logo" width="135" style="display: block; margin: 0 auto; width: 135px; max-width: 140px; height: auto; border: 0; outline: none; text-decoration: none;" />
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Summit Pill Badge -->
-              <div style="margin-top: 14px; text-align: center;">
-                <div style="display: inline-block; padding: 5px 14px; background-color: rgba(255, 255, 255, 0.12); border: 1px solid rgba(251, 191, 36, 0.55); border-radius: 9999px;">
-                  <span style="color: #ffffff; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;">
-                    StudentsxCEOs International Summit 2026
-                  </span>
-                </div>
-              </div>
-
-              ${
-                headerHeading
-                  ? `<h1 style="margin: 14px 0 0 0; color: #ffffff; font-size: 19px; font-weight: 700; letter-spacing: 0.2px;">${headerHeading}</h1>`
-                  : ""
-              }
+            <td style="padding: 0; margin: 0; background-color: #0b1536; text-align: center; border-top-left-radius: 16px; border-top-right-radius: 16px; overflow: hidden;">
+              <img src="${resolvedBannerUrl}" alt="StudentsxCEOs International Summit 2026 Header Banner" width="560" style="width: 100%; max-width: 560px; height: auto; display: block; border-top-left-radius: 16px; border-top-right-radius: 16px; border: 0; outline: none; margin: 0 auto;" />
             </td>
           </tr>
-
-          <!-- Main Content Section -->
           <tr>
-            <td style="padding: 36px 28px; background-color: #ffffff;">
+            <td style="padding: 32px 28px; background-color: #ffffff;">
+              ${
+                headerHeading
+                  ? `<div style="margin: 0 0 24px 0; padding-bottom: 14px; border-bottom: 1px solid #f1f5f9;">
+                      <h1 style="margin: 0; color: #0f172a; font-size: 20px; font-weight: 700; line-height: 1.3;">${headerHeading}</h1>
+                    </div>`
+                  : ""
+              }
               ${contentHtml}
             </td>
           </tr>
-
-          <!-- Footer with Verified Social Media & Organization Copyright -->
           <tr>
-            <td style="background-color: #f8fafc; padding: 22px 28px; text-align: center; border-top: 1px solid #e2e8f0;">
+            <td style="background-color: #f8fafc; padding: 24px 28px; text-align: center; border-top: 1px solid #e2e8f0; border-bottom-left-radius: 16px; border-bottom-right-radius: 16px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto 12px auto;">
+                <tr>
+                  <td align="center">
+                    <img src="${resolvedLogoUrl}" alt="StudentsxCEOs International Summit Logo" width="46" style="display: block; margin: 0 auto; width: 46px; max-width: 50px; height: auto; border: 0; outline: none; text-decoration: none;" />
+                  </td>
+                </tr>
+              </table>
               <p style="margin: 0 0 10px 0; font-size: 12px; color: #64748b; font-weight: 600;">
                 Connect with us:
                 <a href="https://instagram.com/sxcintersummit" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; margin: 0 6px;">Instagram</a> &bull;
@@ -153,12 +151,11 @@ export function renderEmailTemplate({
                 <a href="https://tiktok.com/@intersummitsxc" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; margin: 0 6px;">TikTok</a>
               </p>
               <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #94a3b8;">
-                If you did not initiate this request, you can safely ignore this email.<br>
+                ${footerNote ? `${footerNote}<br>` : "If you did not initiate this request, you can safely ignore this email.<br>"}
                 &copy; 2026 StudentsxCEOs International Summit. All rights reserved.
               </p>
             </td>
           </tr>
-
         </table>
       </td>
     </tr>
@@ -206,6 +203,7 @@ export async function sendOtpEmail(
     title,
     headerHeading: title,
     contentHtml,
+    footerNote: "If you did not initiate this request, you can safely ignore this email.",
   });
 
   return await sendMail({
@@ -227,7 +225,7 @@ export async function sendTestEmail(to: string) {
     </p>
     <div style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 14px 18px; border-radius: 6px; margin: 20px 0;">
       <p style="margin: 0; color: #166534; font-size: 14px; font-weight: 600;">Engine Status: Operational</p>
-      <p style="margin: 4px 0 0 0; color: #15803d; font-size: 13px;">Redesigned header with SXC Logo and brand gradient theme loaded successfully.</p>
+      <p style="margin: 4px 0 0 0; color: #15803d; font-size: 13px;">Standardized email layout with official Header Banner and Logo assets loaded successfully.</p>
     </div>
     <p style="font-size: 12px; color: #94a3b8; margin: 20px 0 0 0;">Timestamp: ${new Date().toUTCString()}</p>
   `;
