@@ -5,6 +5,7 @@ import financeRouter from '../features/finance/finance.route'
 import accessCodeRouter from '../features/accesscode/accesscode.route'
 import semifinalRouter from '../features/semifinal/semifinal.route'
 import configRouter from '../features/config/config.route'
+import ibccRouter from '../features/ibcc/ibcc.route'
 
 const routes = Router()
 
@@ -14,5 +15,6 @@ routes.use('/finance', financeRouter)
 routes.use('/access-code', accessCodeRouter)
 routes.use('/semifinal', semifinalRouter)
 routes.use('/config', configRouter)
+routes.use('/ibcc', ibccRouter)
 
 export default routes
