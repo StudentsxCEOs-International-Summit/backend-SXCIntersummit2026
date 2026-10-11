@@ -1,10 +1,14 @@
 import crypto from 'crypto';
+import path from 'path';
 import prisma from '../../configs/db';
 import { env } from '../../configs/env';
 import { hashPassword } from '../../utils/bcrypt';
 import { signToken } from '../../utils/jwt';
 import { sendMail } from '../../services/mail.service';
-import { fileToPublicUrl } from '../../services/storage.service';
+import {
+  getOrCreateTeamFolder,
+  uploadBufferToDrive,
+} from '../../services/storage.service';
 import {
   renderTeamRegistrationConfirmationEmail,
   renderMemberInvitationEmail,
@@ -204,16 +208,53 @@ export async function registerTeam(
       });
     }
 
+    const sanitizedTeamName = normalizedTeamName.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const sanitizedLeaderName = leaderUser.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const teamFolderId = await getOrCreateTeamFolder(selectedCodeRecord.code, normalizedTeamName);
+
+    const [ktmUpload, followUpload, twibbonUpload, posterUpload, broadcastUpload] =
+      await Promise.all([
+        uploadBufferToDrive(
+          files.ktm_file[0].buffer,
+          `KTM_${sanitizedLeaderName}${path.extname(files.ktm_file[0].originalname) || '.pdf'}`,
+          files.ktm_file[0].mimetype,
+          teamFolderId,
+        ),
+        uploadBufferToDrive(
+          files.follow_proof[0].buffer,
+          `Follow_Instagram_${sanitizedTeamName}${path.extname(files.follow_proof[0].originalname) || '.pdf'}`,
+          files.follow_proof[0].mimetype,
+          teamFolderId,
+        ),
+        uploadBufferToDrive(
+          files.twibbon_proof[0].buffer,
+          `Twibbon_${sanitizedTeamName}${path.extname(files.twibbon_proof[0].originalname) || '.pdf'}`,
+          files.twibbon_proof[0].mimetype,
+          teamFolderId,
+        ),
+        uploadBufferToDrive(
+          files.poster_proof[0].buffer,
+          `Share_Poster_${sanitizedTeamName}${path.extname(files.poster_proof[0].originalname) || '.pdf'}`,
+          files.poster_proof[0].mimetype,
+          teamFolderId,
+        ),
+        uploadBufferToDrive(
+          files.broadcast_proof[0].buffer,
+          `Share_Broadcast_${sanitizedTeamName}${path.extname(files.broadcast_proof[0].originalname) || '.pdf'}`,
+          files.broadcast_proof[0].mimetype,
+          teamFolderId,
+        ),
+      ]);
+
     const requirementFileMappings = [
-      { event: 'IBCC_REQUIREMENT_KTM', type: 'IDCARD' as const, file: files.ktm_file[0] },
-      { event: 'IBCC_REQUIREMENT_FOLLOW', type: 'PROMOTION' as const, file: files.follow_proof[0] },
-      { event: 'IBCC_REQUIREMENT_TWIBBON', type: 'PROMOTION' as const, file: files.twibbon_proof[0] },
-      { event: 'IBCC_REQUIREMENT_POSTER', type: 'PROMOTION' as const, file: files.poster_proof[0] },
-      { event: 'IBCC_REQUIREMENT_BROADCAST', type: 'PROMOTION' as const, file: files.broadcast_proof[0] },
+      { event: 'IBCC_REQUIREMENT_KTM', type: 'IDCARD' as const, file: files.ktm_file[0], upload: ktmUpload },
+      { event: 'IBCC_REQUIREMENT_FOLLOW', type: 'PROMOTION' as const, file: files.follow_proof[0], upload: followUpload },
+      { event: 'IBCC_REQUIREMENT_TWIBBON', type: 'PROMOTION' as const, file: files.twibbon_proof[0], upload: twibbonUpload },
+      { event: 'IBCC_REQUIREMENT_POSTER', type: 'PROMOTION' as const, file: files.poster_proof[0], upload: posterUpload },
+      { event: 'IBCC_REQUIREMENT_BROADCAST', type: 'PROMOTION' as const, file: files.broadcast_proof[0], upload: broadcastUpload },
     ];
 
     for (const item of requirementFileMappings) {
-      const publicUrl = fileToPublicUrl(item.file);
       await tx.submission.create({
         data: {
           teamId: team.id,
@@ -224,7 +265,8 @@ export async function registerTeam(
           type: item.type,
           Files: {
             create: {
-              filePath: publicUrl,
+              filePath: item.upload.webViewLink,
+              gdriveId: item.upload.fileId,
               fileType: item.file.mimetype,
               fileSize: item.file.size,
             },
@@ -245,6 +287,7 @@ export async function registerTeam(
     return {
       team,
       teamCode: selectedCodeRecord.code,
+      teamFolderId,
       pendingMemberInvitations,
     };
   });
@@ -291,6 +334,8 @@ export async function registerTeam(
     teamId: result.team.id,
     teamName: result.team.name,
     teamCode: result.teamCode,
+    driveFolderId: result.teamFolderId,
+    driveFolderUrl: `https://drive.google.com/drive/folders/${result.teamFolderId}`,
     status: 'REGISTERED',
     memberCount: 1 + (input.members || []).length,
     waGroupLink,
@@ -535,7 +580,25 @@ export async function submitPreliminarySlideDeck(
     throw new Error('You are not the leader of an active IBCC team or team was not found.');
   }
 
-  const fileUrl = fileToPublicUrl(file);
+  const targetFolderId =
+    env.GOOGLE_DRIVE_FOLDER_PRELIMINARY_ID ||
+    env.GOOGLE_DRIVE_FOLDER_IBCC_ID ||
+    env.GOOGLE_DRIVE_FOLDER_ID;
+
+  if (!targetFolderId) {
+    throw new Error('Google Drive Preliminary folder ID is not configured.');
+  }
+
+  const ext = path.extname(file.originalname) || '.pdf';
+  const sanitizedTeamName = team.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const fileName = `[${team.code}]_${sanitizedTeamName}_Preliminary${ext}`;
+
+  const uploadResult = await uploadBufferToDrive(
+    file.buffer,
+    fileName,
+    file.mimetype,
+    targetFolderId,
+  );
 
   const submission = await prisma.submission.create({
     data: {
@@ -547,7 +610,8 @@ export async function submitPreliminarySlideDeck(
       type: 'TASK',
       Files: {
         create: {
-          filePath: fileUrl,
+          filePath: uploadResult.webViewLink,
+          gdriveId: uploadResult.fileId,
           fileType: file.mimetype,
           fileSize: file.size,
         },
@@ -562,6 +626,7 @@ export async function submitPreliminarySlideDeck(
     submissionId: submission.id,
     stage: submission.stage,
     submittedAt: submission.submittedAt,
-    fileUrl,
+    fileUrl: uploadResult.webViewLink,
+    gdriveId: uploadResult.fileId,
   };
 }
