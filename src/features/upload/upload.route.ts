@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth.middleware";
-import { uploadPayment, uploadRequirement, uploadSlides } from "../../services/storage.service";
+import { uploadPayment, uploadSlides } from "../../services/storage.service";
 import * as UploadController from "./upload.controller";
 
 const uploadRouter = Router();
@@ -11,14 +11,6 @@ uploadRouter.post(
   requireAuth,
   uploadPayment.single("file"),
   UploadController.uploadPaymentProof,
-);
-
-// Upload requirement (twibbon / story)
-uploadRouter.post(
-  "/requirement",
-  requireAuth,
-  uploadRequirement.single("file"),
-  UploadController.uploadRequirementProof,
 );
 
 // IBCC-09: Upload 5-slide deck
