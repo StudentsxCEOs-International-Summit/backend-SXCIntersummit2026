@@ -1,6 +1,7 @@
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { Readable } from "stream";
 import { google } from "googleapis";
 import { env } from "../configs/env";
@@ -11,22 +12,27 @@ export interface UploadGdriveResult {
   directDownloadLink: string;
 }
 
-let driveInstance: ReturnType<typeof google.drive> | null = null;
+let driveInstance: any = null;
 
 export function getDriveClient() {
-  if (!driveInstance) {
-    if (!env.GOOGLE_DRIVE_CLIENT_EMAIL || !env.GOOGLE_DRIVE_PRIVATE_KEY) {
-      throw new Error("Google Drive credentials are not configured in environment variables.");
-    }
+  if (driveInstance) return driveInstance;
 
-    const auth = new google.auth.JWT({
-      email: env.GOOGLE_DRIVE_CLIENT_EMAIL,
-      key: env.GOOGLE_DRIVE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-      scopes: ["https://www.googleapis.com/auth/drive"],
-    });
+  const clientEmail = env.GOOGLE_DRIVE_CLIENT_EMAIL || env.GOOGLE_CLIENT_EMAIL;
+  const privateKey = env.GOOGLE_DRIVE_PRIVATE_KEY || env.GOOGLE_PRIVATE_KEY;
 
-    driveInstance = google.drive({ version: "v3", auth });
+  if (!clientEmail || !privateKey) {
+    throw new Error(
+      "Google Drive credentials are not configured (require GOOGLE_DRIVE_CLIENT_EMAIL & GOOGLE_DRIVE_PRIVATE_KEY).",
+    );
   }
+
+  const auth = new google.auth.JWT({
+    email: clientEmail,
+    key: privateKey.replace(/\\n/g, "\n"),
+    scopes: ["https://www.googleapis.com/auth/drive"],
+  });
+
+  driveInstance = google.drive({ version: "v3", auth });
   return driveInstance;
 }
 
@@ -143,11 +149,39 @@ export async function uploadBufferToDrive(
 
 export const uploadStreamToGoogleDrive = uploadBufferToDrive;
 
+/**
+ * Uploads a file buffer to Google Drive and returns the web view link (compatibility helper)
+ */
+export async function uploadFileToDrive(file: Express.Multer.File): Promise<string> {
+  const folderId =
+    env.GOOGLE_DRIVE_FOLDER_ID ||
+    env.GOOGLE_DRIVE_FOLDER_IBCC_ID ||
+    env.GOOGLE_DRIVE_FOLDER_UPLOADS_ROOT_ID ||
+    "";
+
+  if (!folderId) {
+    throw new Error("Google Drive Folder ID is not configured.");
+  }
+
+  const ext = path.extname(file.originalname);
+  const uniqueName = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}${ext}`;
+
+  const result = await uploadBufferToDrive(
+    file.buffer,
+    uniqueName,
+    file.mimetype,
+    folderId,
+  );
+
+  return result.webViewLink;
+}
+
 // ─────────────────────────────────────────────
 // MULTER IN-MEMORY CONFIGURATION (ZERO LOCAL DISK)
 // ─────────────────────────────────────────────
 
 const storage = multer.memoryStorage();
+export const memoryStorage = storage;
 
 const ALLOWED_IMAGE_TYPES = [
   "image/jpeg",
@@ -163,11 +197,7 @@ const ALLOWED_DOC_TYPES = [
   ...ALLOWED_IMAGE_TYPES,
 ];
 
-function imageFilter(
-  _req: Express.Request,
-  file: Express.Multer.File,
-  cb: multer.FileFilterCallback,
-) {
+function imageFilter(_req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) {
   if (ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
     cb(null, true);
   } else {
@@ -175,24 +205,23 @@ function imageFilter(
   }
 }
 
-function docFilter(
-  _req: Express.Request,
-  file: Express.Multer.File,
-  cb: multer.FileFilterCallback,
-) {
+function docFilter(_req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) {
   if (ALLOWED_DOC_TYPES.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(
-      new Error(
-        `Only PDF, PPT/PPTX, and image files are allowed. Received: ${file.mimetype}`,
-      ),
-    );
+    cb(new Error(`Only PDF, PPT/PPTX, and image files are allowed. Received: ${file.mimetype}`));
   }
 }
 
 /** Upload payment proof (images only, max 5 MB) */
 export const uploadPayment = multer({
+  storage,
+  fileFilter: imageFilter,
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+/** Upload requirement proof – twibbon / IG story screenshot (images only, max 5 MB) */
+export const uploadRequirement = multer({
   storage,
   fileFilter: imageFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
