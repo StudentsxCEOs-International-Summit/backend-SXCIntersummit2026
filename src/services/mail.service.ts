@@ -106,31 +106,13 @@ export function renderEmailTemplate({
         <!-- Main Card Container -->
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 560px; width: 100%; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.04); border: 1px solid #e2e8f0;">
           
-          <!-- Redesigned Header: SXC Brand Deep Gradient + Logo + Badge + Gold Accent -->
+          <!-- Banner Header -->
           <tr>
-            <td style="background-color: #0b1536; background: linear-gradient(145deg, #091129 0%, #172554 45%, #1e3a8a 80%, #2563eb 100%); padding: 36px 24px 28px 24px; text-align: center; border-bottom: 3px solid #f59e0b;">
-              
-              <!-- SXC Logo from Hosted Image URL -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td align="center">
-                    <img src="${env.EMAIL_LOGO_URL}" alt="SXC International Summit Logo" width="135" style="display: block; margin: 0 auto; width: 135px; max-width: 140px; height: auto; border: 0; outline: none; text-decoration: none;" />
-                  </td>
-                </tr>
-              </table>
-
-              <!-- Summit Pill Badge -->
-              <div style="margin-top: 14px; text-align: center;">
-                <div style="display: inline-block; padding: 5px 14px; background-color: rgba(255, 255, 255, 0.12); border: 1px solid rgba(251, 191, 36, 0.55); border-radius: 9999px;">
-                  <span style="color: #ffffff; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase;">
-                    StudentsxCEOs International Summit 2026
-                  </span>
-                </div>
-              </div>
-
+            <td style="padding: 0; text-align: center; border-bottom: 3px solid #f59e0b; background-color: #f1f5f9;">
+              <img src="${env.EMAIL_HEADER_BANNER_URL || env.EMAIL_BANNER_URL}" alt="SXC International Summit Banner" width="100%" style="display: block; width: 100%; max-width: 560px; height: auto; border: 0; outline: none; text-decoration: none;" />
               ${
                 headerHeading
-                  ? `<h1 style="margin: 14px 0 0 0; color: #ffffff; font-size: 19px; font-weight: 700; letter-spacing: 0.2px;">${headerHeading}</h1>`
+                  ? `<div style="background-color: #0b1536; padding: 14px 24px;"><h1 style="margin: 0; color: #ffffff; font-size: 19px; font-weight: 700; letter-spacing: 0.2px;">${headerHeading}</h1></div>`
                   : ""
               }
             </td>

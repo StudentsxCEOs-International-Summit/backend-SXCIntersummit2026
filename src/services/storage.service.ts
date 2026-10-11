@@ -11,21 +11,29 @@ let driveClient: any = null;
 function getDriveClient() {
   if (driveClient) return driveClient;
 
-  if (!env.GOOGLE_DRIVE_CREDENTIALS_BASE64) {
-    console.warn(
-      "[STORAGE] GOOGLE_DRIVE_CREDENTIALS_BASE64 is not set. Google Drive uploads will fail or be mocked."
-    );
-    return null;
-  }
-
   try {
-    const credentialsJson = Buffer.from(env.GOOGLE_DRIVE_CREDENTIALS_BASE64, "base64").toString("utf-8");
-    const credentials = JSON.parse(credentialsJson);
+    let auth;
 
-    const auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: ["https://www.googleapis.com/auth/drive.file"],
-    });
+    if (env.GOOGLE_DRIVE_CLIENT_EMAIL && env.GOOGLE_DRIVE_PRIVATE_KEY) {
+      auth = new google.auth.JWT({
+        email: env.GOOGLE_DRIVE_CLIENT_EMAIL,
+        key: env.GOOGLE_DRIVE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+        scopes: ["https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"],
+      });
+    } else if (env.GOOGLE_DRIVE_CREDENTIALS_BASE64) {
+      const credentialsJson = Buffer.from(env.GOOGLE_DRIVE_CREDENTIALS_BASE64, "base64").toString("utf-8");
+      const credentials = JSON.parse(credentialsJson);
+
+      auth = new google.auth.GoogleAuth({
+        credentials,
+        scopes: ["https://www.googleapis.com/auth/drive.file"],
+      });
+    } else {
+      console.warn(
+        "[STORAGE] Neither GOOGLE_DRIVE_CLIENT_EMAIL/GOOGLE_DRIVE_PRIVATE_KEY nor GOOGLE_DRIVE_CREDENTIALS_BASE64 is set. Google Drive uploads will fail or be mocked."
+      );
+      return null;
+    }
 
     driveClient = google.drive({ version: "v3", auth });
     return driveClient;

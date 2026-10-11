@@ -45,6 +45,7 @@ app.use(express.urlencoded({ extended: true }))
 app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 
 app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')))
+app.use('/public', express.static(path.resolve(process.cwd(), 'public')))
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions))
 app.get('/api-docs.json', (_req, res) => {
