@@ -25,6 +25,15 @@ const envSchema = z
     GOOGLE_CLIENT_ID: z.string().min(1, "GOOGLE_CLIENT_ID is required"),
     GOOGLE_CLIENT_SECRET: z.string().min(1, "GOOGLE_CLIENT_SECRET is required"),
     GOOGLE_REDIRECT_URI: z.url("GOOGLE_REDIRECT_URI must be a valid URL"),
+    GOOGLE_DRIVE_CLIENT_EMAIL: z.string().optional(),
+    GOOGLE_DRIVE_PRIVATE_KEY: z.string().optional(),
+    GOOGLE_DRIVE_FOLDER_UPLOADS_ROOT_ID: z.string().optional(),
+    GOOGLE_DRIVE_FOLDER_IBCC_ID: z.string().optional(),
+    GOOGLE_DRIVE_FOLDER_ID: z.string().optional(),
+    GOOGLE_DRIVE_FOLDER_REGISTRATION_ID: z.string().optional(),
+    GOOGLE_DRIVE_FOLDER_PRELIMINARY_ID: z.string().optional(),
+    GOOGLE_DRIVE_FOLDER_PAYMENT_ID: z.string().optional(),
+    GOOGLE_DRIVE_FOLDER_SEMIFINAL_SLIDES_ID: z.string().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production" && !value.CORS_ORIGIN) {
