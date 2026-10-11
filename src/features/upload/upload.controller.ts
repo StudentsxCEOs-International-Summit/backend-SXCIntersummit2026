@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
+import path from "path";
 import prisma from "../../configs/db";
+import { env } from "../../configs/env";
 import { ok, badRequest, internalError, notFound } from "../../utils/response";
-import { uploadFileToDrive } from "../../services/storage.service";
+import { uploadBufferToDrive } from "../../services/storage.service";
 
 // POST /upload/payment (IBCC-06)
 export async function uploadPaymentProof(req: Request, res: Response) {
@@ -15,7 +17,25 @@ export async function uploadPaymentProof(req: Request, res: Response) {
     const team = await prisma.team.findUnique({ where: { id: teamId } });
     if (!team) return notFound(res, "Team not found.");
 
-    const fileUrl = await uploadFileToDrive(file);
+    const targetFolderId =
+      env.GOOGLE_DRIVE_FOLDER_PAYMENT_ID ||
+      env.GOOGLE_DRIVE_FOLDER_IBCC_ID ||
+      env.GOOGLE_DRIVE_FOLDER_ID;
+
+    if (!targetFolderId) {
+      return internalError(res, "Google Drive Payment folder ID is not configured.");
+    }
+
+    const ext = path.extname(file.originalname) || ".jpg";
+    const sanitizedTeamName = team.name.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const fileName = `[${team.code}]_${sanitizedTeamName}_PaymentProof${ext}`;
+
+    const uploadResult = await uploadBufferToDrive(
+      file.buffer,
+      fileName,
+      file.mimetype,
+      targetFolderId,
+    );
 
     const submission = await prisma.submission.create({
       data: {
@@ -25,7 +45,8 @@ export async function uploadPaymentProof(req: Request, res: Response) {
         type: "PAYMENT",
         Files: {
           create: {
-            filePath: fileUrl,
+            filePath: uploadResult.webViewLink,
+            gdriveId: uploadResult.fileId,
             fileType: file.mimetype,
             fileSize: file.size,
           },
@@ -34,49 +55,19 @@ export async function uploadPaymentProof(req: Request, res: Response) {
       include: { Files: true },
     });
 
-    return ok(res, { submission }, "Payment proof uploaded successfully.", 201);
+    return ok(
+      res,
+      {
+        submission,
+        gdriveId: uploadResult.fileId,
+        viewUrl: uploadResult.webViewLink,
+      },
+      "Payment proof uploaded successfully to Google Drive.",
+      201,
+    );
   } catch (error: any) {
     console.error("[UPLOAD] uploadPaymentProof error:", error.message);
-    return internalError(res, "Failed to upload payment proof.");
-  }
-}
-
-// POST /upload/requirement (twibbon / story)
-export async function uploadRequirementProof(req: Request, res: Response) {
-  try {
-    const file = req.file;
-    if (!file) return badRequest(res, "No file uploaded. Please attach a requirement proof image.");
-
-    const teamId = Number(req.body.teamId);
-    const type = req.body.type as string; // "twibbon" | "story"
-    if (!teamId) return badRequest(res, "teamId is required.");
-
-    const team = await prisma.team.findUnique({ where: { id: teamId } });
-    if (!team) return notFound(res, "Team not found.");
-
-    const fileUrl = await uploadFileToDrive(file);
-
-    const submission = await prisma.submission.create({
-      data: {
-        teamId,
-        stage: "REGISTRATION",
-        event: `IBCC-requirement-${type}`,
-        type: "PROMOTION",
-        Files: {
-          create: {
-            filePath: fileUrl,
-            fileType: file.mimetype,
-            fileSize: file.size,
-          },
-        },
-      },
-      include: { Files: true },
-    });
-
-    return ok(res, { submission }, `Requirement proof (${type}) uploaded successfully.`, 201);
-  } catch (error: any) {
-    console.error("[UPLOAD] uploadRequirementProof error:", error.message);
-    return internalError(res, "Failed to upload requirement proof.");
+    return internalError(res, `Failed to upload payment proof: ${error.message}`);
   }
 }
 
@@ -92,13 +83,31 @@ export async function uploadSlideDeck(req: Request, res: Response) {
     const team = await prisma.team.findUnique({ where: { id: teamId } });
     if (!team) return notFound(res, "Team not found.");
 
-    const fileUrl = await uploadFileToDrive(file);
+    const targetFolderId =
+      env.GOOGLE_DRIVE_FOLDER_SEMIFINAL_SLIDES_ID ||
+      env.GOOGLE_DRIVE_FOLDER_IBCC_ID ||
+      env.GOOGLE_DRIVE_FOLDER_ID;
+
+    if (!targetFolderId) {
+      return internalError(res, "Google Drive Semifinal Slides folder ID is not configured.");
+    }
+
+    const ext = path.extname(file.originalname) || ".pdf";
+    const sanitizedTeamName = team.name.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const fileName = `[${team.code}]_${sanitizedTeamName}_Semifinal_Slides${ext}`;
+
+    const uploadResult = await uploadBufferToDrive(
+      file.buffer,
+      fileName,
+      file.mimetype,
+      targetFolderId,
+    );
 
     // Save to SlideDeck model
     const slideDeck = await prisma.slideDeck.create({
       data: {
         teamId,
-        fileUrl,
+        fileUrl: uploadResult.webViewLink,
       },
     });
 
@@ -111,7 +120,8 @@ export async function uploadSlideDeck(req: Request, res: Response) {
         type: "TASK",
         Files: {
           create: {
-            filePath: fileUrl,
+            filePath: uploadResult.webViewLink,
+            gdriveId: uploadResult.fileId,
             fileType: file.mimetype,
             fileSize: file.size,
           },
@@ -122,12 +132,17 @@ export async function uploadSlideDeck(req: Request, res: Response) {
 
     return ok(
       res,
-      { slideDeck, submission },
-      "Slide deck uploaded successfully (max 5 slides).",
+      {
+        slideDeck,
+        submission,
+        gdriveId: uploadResult.fileId,
+        viewUrl: uploadResult.webViewLink,
+      },
+      "Slide deck uploaded successfully to Google Drive (max 5 slides).",
       201,
     );
   } catch (error: any) {
     console.error("[UPLOAD] uploadSlideDeck error:", error.message);
-    return internalError(res, "Failed to upload slide deck.");
+    return internalError(res, `Failed to upload slide deck: ${error.message}`);
   }
 }

@@ -57,6 +57,10 @@ REST API documentation for **SxC International Summit 2026** backend system.
       name: 'Config - Application',
       description: 'Application configuration, registration deadline info, and email scheduler trigger',
     },
+    {
+      name: 'IBCC - Team Registration & Preliminary',
+      description: 'IBCC 2026 team registration (IBCC-01), member activation via magic link (IBCC-MEMBER-01), team profile dashboard (IBCC-01b), and preliminary slide deck submission (IBCC-03)',
+    },
   ],
   components: {
     securitySchemes: {
@@ -209,6 +213,127 @@ REST API documentation for **SxC International Summit 2026** backend system.
             description: 'Optional if provided via Authorization header or query parameter',
             example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
           },
+        },
+      },
+      IbccMemberItemInput: {
+        type: 'object',
+        required: ['fullName', 'email', 'whatsapp', 'institution', 'yearOfStudy'],
+        properties: {
+          fullName: { type: 'string', minLength: 2, example: 'Jane Doe' },
+          email: { type: 'string', format: 'email', example: 'jane@ui.ac.id' },
+          whatsapp: { type: 'string', minLength: 8, example: '+6281298765432' },
+          institution: { type: 'string', minLength: 3, example: 'Universitas Indonesia - Accounting' },
+          yearOfStudy: {
+            type: 'string',
+            enum: ['1st year', '2nd year', '3rd year', '4th year'],
+            example: '3rd year',
+          },
+        },
+      },
+      IbccLeaderInfoInput: {
+        type: 'object',
+        required: ['whatsapp', 'institution', 'yearOfStudy'],
+        properties: {
+          whatsapp: { type: 'string', minLength: 8, example: '+6281234567890' },
+          institution: { type: 'string', minLength: 3, example: 'Universitas Indonesia - Management' },
+          yearOfStudy: {
+            type: 'string',
+            enum: ['1st year', '2nd year', '3rd year', '4th year'],
+            example: '3rd year',
+          },
+        },
+      },
+      IbccClaimAccountInput: {
+        type: 'object',
+        required: ['token', 'password'],
+        properties: {
+          token: { type: 'string', example: '58f4a1324838b0debcad95932df212cf...' },
+          password: {
+            type: 'string',
+            minLength: 8,
+            example: 'PasswordBaru123!',
+            description: 'Must include uppercase, lowercase, and number.',
+          },
+        },
+      },
+      IbccRegisterResponse: {
+        type: 'object',
+        properties: {
+          teamId: { type: 'integer', example: 42 },
+          teamName: { type: 'string', example: 'The Innovators' },
+          teamCode: { type: 'string', example: 'MYR6JD' },
+          status: { type: 'string', example: 'REGISTERED' },
+          memberCount: { type: 'integer', example: 2 },
+          waGroupLink: { type: 'string', example: 'https://chat.whatsapp.com/IBCC2026PreliminaryStageInvite' },
+        },
+      },
+      IbccVerifyTokenResponse: {
+        type: 'object',
+        properties: {
+          teamId: { type: 'integer', example: 42 },
+          teamName: { type: 'string', example: 'The Innovators' },
+          leaderName: { type: 'string', example: 'John Doe' },
+          memberName: { type: 'string', example: 'Jane Doe' },
+          memberEmail: { type: 'string', example: 'jane@ui.ac.id' },
+          isAlreadyRegisteredUser: { type: 'boolean', example: false },
+        },
+      },
+      IbccMyTeamResponse: {
+        type: 'object',
+        properties: {
+          id: { type: 'integer', example: 42 },
+          name: { type: 'string', example: 'The Innovators' },
+          code: { type: 'string', example: 'MYR6JD' },
+          status: { type: 'string', example: 'PRELIMINARY_SUBMITTED' },
+          isLeader: { type: 'boolean', example: true },
+          competitionStage: { type: 'string', example: 'PREELIM' },
+          selectionResult: {
+            type: 'object',
+            properties: {
+              isAnnounced: { type: 'boolean', example: false },
+              isQualified: { type: 'boolean', example: false },
+              announcementMessage: { type: 'string', nullable: true, example: null },
+            },
+          },
+          leader: {
+            type: 'object',
+            properties: {
+              id: { type: 'integer', example: 12 },
+              name: { type: 'string', example: 'John Doe' },
+              email: { type: 'string', example: 'leader@ui.ac.id' },
+              institution: { type: 'string', example: 'Universitas Indonesia - Management' },
+            },
+          },
+          members: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'integer', example: 15 },
+                name: { type: 'string', example: 'Jane Doe' },
+                email: { type: 'string', example: 'jane@ui.ac.id' },
+                institution: { type: 'string', example: 'Universitas Indonesia - Accounting' },
+                yearOfStudy: { type: 'string', example: '3rd year' },
+              },
+            },
+          },
+          submissions: {
+            type: 'object',
+            properties: {
+              requirementsCompleted: { type: 'boolean', example: true },
+              preliminaryOutputSubmitted: { type: 'boolean', example: true },
+              preliminarySubmittedAt: { type: 'string', format: 'date-time', example: '2026-10-15T10:30:00.000Z' },
+            },
+          },
+        },
+      },
+      IbccPreliminarySubmissionResponse: {
+        type: 'object',
+        properties: {
+          submissionId: { type: 'integer', example: 105 },
+          stage: { type: 'string', example: 'PREELIM' },
+          submittedAt: { type: 'string', format: 'date-time', example: '2026-10-15T14:20:00.000Z' },
+          fileUrl: { type: 'string', example: '/uploads/preliminary/1728512345-abc123.pdf' },
         },
       },
     },
@@ -1533,6 +1658,276 @@ REST API documentation for **SxC International Summit 2026** backend system.
         description: 'Manually triggers the email scheduler to send deadline reminders and payment reminders. Can be used as a webhook endpoint for cronjob.org.',
         responses: {
           200: { description: 'Email scheduler triggered.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+        },
+      },
+    },
+    '/api/ibcc/register': {
+      post: {
+        tags: ['IBCC - Team Registration & Preliminary'],
+        summary: 'Register team for IBCC 2026 (IBCC-01)',
+        description: 'Team leader registers their team (1-3 members) with identity details and 5 verification files. Allocates a Master Team Code atomically, creates invitations with magic links for members, and queues confirmation emails.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: [
+                  'teamName',
+                  'memberComposition',
+                  'sourceInfo',
+                  'leaderInfo',
+                  'agreeTerms',
+                  'confirmParticipation',
+                  'ktm_file',
+                  'follow_proof',
+                  'twibbon_proof',
+                  'poster_proof',
+                  'broadcast_proof',
+                ],
+                properties: {
+                  teamName: { type: 'string', minLength: 3, maxLength: 50, example: 'The Innovators' },
+                  memberComposition: {
+                    type: 'string',
+                    enum: ['SAME_UNIVERSITY', 'MULTIPLE_UNIVERSITIES'],
+                    example: 'SAME_UNIVERSITY',
+                  },
+                  sourceInfo: {
+                    type: 'string',
+                    enum: ['INSTAGRAM', 'TIKTOK', 'X', 'LINKEDIN', 'FRIENDS_FAMILY', 'COMMUNITY_MEDIA_PARTNER', 'OTHERS'],
+                    example: 'INSTAGRAM',
+                  },
+                  leaderInfo: {
+                    type: 'string',
+                    description: 'JSON-stringified leader details: { whatsapp, institution, yearOfStudy }',
+                    example: '{"whatsapp":"+6281234567890","institution":"Universitas Indonesia - Management","yearOfStudy":"3rd year"}',
+                  },
+                  members: {
+                    type: 'string',
+                    description: 'JSON-stringified array of 0 to 2 additional member objects',
+                    example: '[{"fullName":"Jane Doe","email":"jane@ui.ac.id","whatsapp":"+6281298765432","institution":"Universitas Indonesia - Accounting","yearOfStudy":"3rd year"}]',
+                  },
+                  agreeTerms: { type: 'string', example: 'true' },
+                  confirmParticipation: { type: 'string', example: 'true' },
+                  ktm_file: { type: 'string', format: 'binary', description: 'Consolidated student ID cards (PDF/JPG/PNG, max 5MB)' },
+                  follow_proof: { type: 'string', format: 'binary', description: 'Instagram follow screenshot (PDF/JPG/PNG, max 5MB)' },
+                  twibbon_proof: { type: 'string', format: 'binary', description: 'Twibbon post proof (PDF/JPG/PNG, max 5MB)' },
+                  poster_proof: { type: 'string', format: 'binary', description: 'Poster share proof (PDF/JPG/PNG, max 5MB)' },
+                  broadcast_proof: { type: 'string', format: 'binary', description: 'Broadcast share screenshots (PDF/JPG/PNG, max 10MB)' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Team successfully registered.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Team successfully registered for IBCC 2026!' },
+                    data: { $ref: '#/components/schemas/IbccRegisterResponse' },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Validation failure or missing files.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiValidationErrorResponse' } } },
+          },
+          401: {
+            description: 'Unauthorized.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+          409: {
+            description: 'Conflict: team name already taken or member already registered.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/api/ibcc/my-team': {
+      get: {
+        tags: ['IBCC - Team Registration & Preliminary'],
+        summary: 'Get team profile and competition stage status (IBCC-01b)',
+        description: 'Returns team details, member list, preliminary submission state, and qualification results for the logged-in user (leader or member). Single-query optimized.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        responses: {
+          200: {
+            description: 'Team profile retrieved successfully.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Team details retrieved successfully.' },
+                    data: { $ref: '#/components/schemas/IbccMyTeamResponse' },
+                  },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+          404: {
+            description: 'No registered team found for this user.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/api/ibcc/members/verify-token': {
+      get: {
+        tags: ['IBCC - Team Registration & Preliminary'],
+        summary: 'Verify member invitation token (IBCC-MEMBER-01)',
+        description: 'Validates magic link invitation token when an invited member opens the link in their browser. Public endpoint.',
+        parameters: [
+          {
+            name: 'token',
+            in: 'query',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Cryptographic activation token from invitation email',
+            example: '58f4a1324838b0debcad95932df212cf6924b1049adca383796ff0f81d116c47',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Token is valid.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Token is valid.' },
+                    data: { $ref: '#/components/schemas/IbccVerifyTokenResponse' },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Invalid, claimed, or expired token.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/api/ibcc/members/claim-account': {
+      post: {
+        tags: ['IBCC - Team Registration & Preliminary'],
+        summary: 'Activate member account and create password (IBCC-MEMBER-01)',
+        description: 'Sets a password for an invited member, activates their account, marks the invitation as claimed, and issues a session JWT.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/IbccClaimAccountInput' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Account activated successfully.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Account successfully activated! Welcome to the team.' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        accessToken: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsIn...' },
+                        user: {
+                          type: 'object',
+                          properties: {
+                            id: { type: 'integer', example: 15 },
+                            name: { type: 'string', example: 'Jane Doe' },
+                            email: { type: 'string', example: 'jane@ui.ac.id' },
+                          },
+                        },
+                        team: {
+                          type: 'object',
+                          properties: {
+                            id: { type: 'integer', example: 42 },
+                            name: { type: 'string', example: 'The Innovators' },
+                            code: { type: 'string', example: 'MYR6JD' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Validation failure or expired token.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/api/ibcc/submission/preliminary': {
+      post: {
+        tags: ['IBCC - Team Registration & Preliminary'],
+        summary: 'Upload preliminary slide deck (IBCC-03)',
+        description: 'Team leader uploads their preliminary case submission slide deck (PDF or PPTX, maximum 15MB).',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['slideDeck'],
+                properties: {
+                  teamId: { type: 'integer', description: 'Optional team ID if inferred from leader', example: 42 },
+                  slideDeck: { type: 'string', format: 'binary', description: 'Preliminary slide deck file (PDF or PPTX, max 15MB)' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Preliminary slide deck submitted successfully.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Preliminary slide deck submitted successfully.' },
+                    data: { $ref: '#/components/schemas/IbccPreliminarySubmissionResponse' },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'No file uploaded or invalid file format.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+          401: {
+            description: 'Unauthorized.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+          403: {
+            description: 'Forbidden: user is not the leader of an active IBCC team.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
         },
       },
     },

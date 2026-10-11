@@ -47,8 +47,8 @@ export async function verifyPayment(req: AuthRequest, res: Response) {
       await prisma.activityLog.create({
         data: {
           staffId: req.user.id,
-          action: 'VERIFY_PAYMENT',
-          details: `Payment verification for team ${team.name}: ${status}${notes ? ` - ${notes}` : ''}`,
+          activity: `Payment verification for team ${team.name}: ${status}${notes ? ` - ${notes}` : ''}`,
+          status,
         },
       });
     }
@@ -112,7 +112,7 @@ export async function verifyPayment(req: AuthRequest, res: Response) {
       }
     }
 
-    return ok(res, 'Payment verification processed successfully.', updatedTeam);
+    return ok(res, updatedTeam, 'Payment verification processed successfully.');
   } catch (error: any) {
     console.error('[FINANCE] verifyPayment error:', error.message);
     return internalError(res, 'Failed to verify payment.');
@@ -154,13 +154,13 @@ export async function verifyRequirement(req: AuthRequest, res: Response) {
       await prisma.activityLog.create({
         data: {
           staffId: req.user.id,
-          action: 'VERIFY_REQUIREMENT',
-          details: `Requirement (${type}) verification for team ${team.name}: ${status}${notes ? ` - ${notes}` : ''}`,
+          activity: `Requirement (${type}) verification for team ${team.name}: ${status}${notes ? ` - ${notes}` : ''}`,
+          status,
         },
       });
     }
 
-    return ok(res, `Requirement (${type}) ${status} successfully.`, updatedTeam);
+    return ok(res, updatedTeam, `Requirement (${type}) ${status} successfully.`);
   } catch (error: any) {
     console.error('[FINANCE] verifyRequirement error:', error.message);
     return internalError(res, 'Failed to verify requirement.');

@@ -1,5 +1,6 @@
 import prisma from '../src/configs/db'
 import { hashPassword } from '../src/utils/bcrypt'
+import { seedTeamCodes } from './seeds/seedTeamCodes'
 
 async function main() {
   const defaultStatus = await prisma.status.upsert({
@@ -55,6 +56,8 @@ async function main() {
   })
 
   console.log('Seeding finished.')
+
+  await seedTeamCodes()
 }
 
 main()
