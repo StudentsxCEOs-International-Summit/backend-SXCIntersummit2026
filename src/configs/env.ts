@@ -37,6 +37,8 @@ const envSchema = z
     GOOGLE_DRIVE_CREDENTIALS_BASE64: z.string().optional(),
     GOOGLE_DRIVE_CLIENT_EMAIL: z.string().optional(),
     GOOGLE_DRIVE_PRIVATE_KEY: z.string().optional(),
+    GOOGLE_CLIENT_EMAIL: z.string().optional(),
+    GOOGLE_PRIVATE_KEY: z.string().optional(),
     GOOGLE_DRIVE_FOLDER_UPLOADS_ROOT_ID: z.string().optional(),
     GOOGLE_DRIVE_FOLDER_IBCC_ID: z.string().optional(),
     GOOGLE_DRIVE_FOLDER_ID: z.string().optional(),

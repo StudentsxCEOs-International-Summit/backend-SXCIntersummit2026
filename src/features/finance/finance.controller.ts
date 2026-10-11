@@ -48,7 +48,7 @@ export async function verifyPayment(req: AuthRequest, res: Response) {
         data: {
           staffId: req.user.id,
           activity: `Payment verification for team ${team.name}: ${status}${notes ? ` - ${notes}` : ''}`,
-          status: status,
+          status,
         },
       });
     }
@@ -186,7 +186,7 @@ export async function verifyRequirement(req: AuthRequest, res: Response) {
         data: {
           staffId: req.user.id,
           activity: `Requirement (${type}) verification for team ${team.name}: ${status}${notes ? ` - ${notes}` : ''}`,
-          status: status,
+          status,
         },
       });
     }

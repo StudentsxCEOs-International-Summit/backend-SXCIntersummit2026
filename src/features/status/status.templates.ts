@@ -1,6 +1,6 @@
 import { renderEmailTemplate } from "../../services/mail.service";
 
-interface StatusEmailData {
+export interface StatusEmailData {
   teamName: string;
   leaderName: string;
   newStatus: string;
@@ -29,19 +29,20 @@ export function renderStatusChangeEmail(data: StatusEmailData): string {
 
   const contentHtml = `
     <h2 style="margin: 0 0 16px 0; color: #0f172a; font-size: 18px; font-weight: 600;">Hello, ${data.leaderName}</h2>
-    <p style="margin: 0 0 24px 0; line-height: 1.6; color: #475569; font-size: 15px;">
-      Your team <strong>${data.teamName}</strong> has an important status update:
+    <p style="margin: 0 0 20px 0; line-height: 1.6; color: #475569; font-size: 15px;">
+      Your team <strong>${data.teamName}</strong> has received an official status update:
     </p>
-    <div style="background-color: ${color.bg}; border-left: 4px solid ${color.border}; padding: 14px 18px; border-radius: 6px; margin: 20px 0;">
+    <div style="background-color: ${color.bg}; border-left: 4px solid ${color.border}; padding: 16px 20px; border-radius: 8px; margin: 20px 0;">
       <p style="margin: 0; color: ${color.text}; font-size: 16px; font-weight: 700;">${color.icon} ${data.newStatus.replace(/_/g, " ")}</p>
       <p style="margin: 6px 0 0 0; color: ${color.text}; font-size: 14px; line-height: 1.5;">${data.statusDescription}</p>
     </div>
-    <p style="font-size: 12px; color: #94a3b8; margin: 20px 0 0 0;">Timestamp: ${new Date().toUTCString()}</p>
+    <p style="font-size: 12px; color: #94a3b8; margin: 24px 0 0 0;">Timestamp: ${new Date().toUTCString()}</p>
   `;
 
   return renderEmailTemplate({
     title: isFinalQualified ? "Congratulations! Qualified for the Final" : `Status Update – ${data.teamName}`,
     headerHeading,
     contentHtml,
+    footerNote: "This email was sent to notify your team of an official competition status update.",
   });
 }
