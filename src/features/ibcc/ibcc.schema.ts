@@ -31,19 +31,7 @@ const parseBoolean = (val: unknown) => {
   return val;
 };
 
-export const verifyMemberTokenQuerySchema = z.object({
-  token: z.string().min(1, 'Activation token is required'),
-});
 
-export const claimMemberAccountSchema = z.object({
-  token: z.string().min(1, 'Activation token is required'),
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters long')
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one number'),
-});
 
 export const memberItemSchema = z.object({
   fullName: z.string().min(2, 'Full name is required'),
@@ -83,4 +71,17 @@ export const registerTeamSchema = z.object({
 });
 
 export type RegisterTeamInput = z.infer<typeof registerTeamSchema>;
-export type ClaimMemberAccountInput = z.infer<typeof claimMemberAccountSchema>;
+
+export const submitScoreSchema = z.object({
+  teamId: z.coerce.number().int().positive("teamId must be a positive integer"),
+  score: z.coerce.number().min(0, "Score must be >= 0").max(100, "Score must be <= 100"),
+  comment: z.string().max(500).optional(),
+});
+
+export const publishResultsSchema = z.object({
+  qualifiedTeamIds: z.array(z.coerce.number().int().positive()).min(1, "At least 1 qualified team is required"),
+});
+
+export type SubmitScoreInput = z.infer<typeof submitScoreSchema>;
+export type PublishResultsInput = z.infer<typeof publishResultsSchema>;
+

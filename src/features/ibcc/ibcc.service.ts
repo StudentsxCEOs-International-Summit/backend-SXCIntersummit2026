@@ -3,7 +3,6 @@ import path from 'path';
 import prisma from '../../configs/db';
 import { env } from '../../configs/env';
 import { hashPassword } from '../../utils/bcrypt';
-import { signToken } from '../../utils/jwt';
 import { sendMail } from '../../services/mail.service';
 import {
   getOrCreateTeamFolder,
@@ -11,9 +10,9 @@ import {
 } from '../../services/storage.service';
 import {
   renderTeamRegistrationConfirmationEmail,
-  renderMemberInvitationEmail,
 } from './ibcc.templates';
 import { RegisterTeamInput } from './ibcc.schema';
+import { sendSemifinalResultEmails } from './ibcc.status';
 
 export interface RegistrationUploadedFiles {
   ktm_file: Express.Multer.File[];
@@ -290,117 +289,6 @@ export async function registerTeam(
   };
 }
 
-export async function verifyMemberToken(token: string) {
-  const invitation = await prisma.teamMemberInvitation.findUnique({
-    where: { token },
-    include: {
-      team: {
-        include: {
-          leader: {
-            select: { id: true, name: true, email: true },
-          },
-        },
-      },
-      user: {
-        select: { id: true, name: true, email: true, createdAt: true },
-      },
-    },
-  });
-
-  if (!invitation) {
-    throw new Error('Invalid or non-existent activation token.');
-  }
-
-  if (invitation.isClaimed) {
-    throw new Error('This invitation has already been claimed.');
-  }
-
-  if (invitation.expiresAt.getTime() < Date.now()) {
-    throw new Error('This invitation token has expired.');
-  }
-
-  return {
-    teamId: invitation.team.id,
-    teamName: invitation.team.name,
-    leaderName: invitation.team.leader.name,
-    memberName: invitation.user.name,
-    memberEmail: invitation.user.email,
-    isAlreadyRegisteredUser: false,
-  };
-}
-
-export async function claimMemberAccount(token: string, newPasswordPlain: string) {
-  const invitation = await prisma.teamMemberInvitation.findUnique({
-    where: { token },
-    include: {
-      team: { select: { id: true, name: true, code: true } },
-      user: { select: { id: true, name: true, email: true, role: true } },
-    },
-  });
-
-  if (!invitation) {
-    throw new Error('Invalid or non-existent activation token.');
-  }
-
-  if (invitation.isClaimed) {
-    throw new Error('This invitation has already been claimed.');
-  }
-
-  if (invitation.expiresAt.getTime() < Date.now()) {
-    throw new Error('This invitation token has expired.');
-  }
-
-  const hashedPassword = await hashPassword(newPasswordPlain);
-
-  const updatedUser = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.update({
-      where: { id: invitation.userId },
-      data: { password: hashedPassword },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-      },
-    });
-
-    await tx.teamMemberInvitation.update({
-      where: { id: invitation.id },
-      data: {
-        isClaimed: true,
-        claimedAt: new Date(),
-      },
-    });
-
-    return user;
-  });
-
-  const accessToken = signToken(
-    {
-      id: updatedUser.id,
-      email: updatedUser.email,
-      name: updatedUser.name,
-      role: updatedUser.role,
-      accountType: 'user',
-    },
-    { expiresIn: env.JWT_EXPIRE as any },
-  );
-
-  return {
-    accessToken,
-    user: {
-      id: updatedUser.id,
-      name: updatedUser.name,
-      email: updatedUser.email,
-    },
-    team: {
-      id: invitation.team.id,
-      name: invitation.team.name,
-      code: invitation.team.code,
-    },
-  };
-}
-
 export async function getMyTeam(userId: number) {
   // Single query joins all related models to eliminate N+1 roundtrips.
   const team = await prisma.team.findFirst({
@@ -599,3 +487,273 @@ export async function submitPreliminarySlideDeck(
     gdriveId: uploadResult.fileId,
   };
 }
+
+export async function submitSemifinalSlideDeck(
+  leaderUserId: number,
+  file: Express.Multer.File,
+  teamIdInput?: number,
+) {
+  const team = await prisma.team.findFirst({
+    where: {
+      leaderId: leaderUserId,
+      ...(teamIdInput ? { id: teamIdInput } : {}),
+    },
+  });
+
+  if (!team) {
+    throw new Error('You are not the leader of an active IBCC team or team was not found.');
+  }
+
+  const targetFolderId =
+    env.GOOGLE_DRIVE_FOLDER_SEMIFINAL_SLIDES_ID ||
+    env.GOOGLE_DRIVE_FOLDER_IBCC_ID ||
+    env.GOOGLE_DRIVE_FOLDER_ID;
+
+  if (!targetFolderId) {
+    throw new Error('Google Drive Semifinal Slides folder ID is not configured.');
+  }
+
+  const ext = path.extname(file.originalname) || '.pdf';
+  const sanitizedTeamName = team.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const fileName = `[${team.code}]_${sanitizedTeamName}_Semifinal_Slides${ext}`;
+
+  const uploadResult = await uploadBufferToDrive(
+    file.buffer,
+    fileName,
+    file.mimetype,
+    targetFolderId,
+  );
+
+  await prisma.slideDeck.create({
+    data: {
+      teamId: team.id,
+      fileUrl: uploadResult.webViewLink,
+    },
+  });
+
+  const submission = await prisma.submission.create({
+    data: {
+      teamId: team.id,
+      userId: leaderUserId,
+      programId: team.programId,
+      stage: 'SEMIFINAL',
+      event: 'IBCC',
+      type: 'TASK',
+      Files: {
+        create: {
+          filePath: uploadResult.webViewLink,
+          gdriveId: uploadResult.fileId,
+          fileType: file.mimetype,
+          fileSize: file.size,
+        },
+      },
+    },
+    include: {
+      Files: true,
+    },
+  });
+
+  return {
+    submissionId: submission.id,
+    stage: submission.stage,
+    submittedAt: submission.submittedAt,
+    fileUrl: uploadResult.webViewLink,
+    gdriveId: uploadResult.fileId,
+  };
+}
+
+export async function submitPaymentProof(
+  leaderUserId: number,
+  file: Express.Multer.File,
+  teamIdInput?: number,
+) {
+  const team = await prisma.team.findFirst({
+    where: {
+      leaderId: leaderUserId,
+      ...(teamIdInput ? { id: teamIdInput } : {}),
+    },
+  });
+
+  if (!team) {
+    throw new Error('You are not the leader of an active IBCC team or team was not found.');
+  }
+
+  const targetFolderId =
+    env.GOOGLE_DRIVE_FOLDER_PAYMENT_ID ||
+    env.GOOGLE_DRIVE_FOLDER_IBCC_ID ||
+    env.GOOGLE_DRIVE_FOLDER_ID;
+
+  if (!targetFolderId) {
+    throw new Error('Google Drive Payment folder ID is not configured.');
+  }
+
+  const ext = path.extname(file.originalname) || '.jpg';
+  const sanitizedTeamName = team.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const fileName = `[${team.code}]_${sanitizedTeamName}_PaymentProof${ext}`;
+
+  const uploadResult = await uploadBufferToDrive(
+    file.buffer,
+    fileName,
+    file.mimetype,
+    targetFolderId,
+  );
+
+  const submission = await prisma.submission.create({
+    data: {
+      teamId: team.id,
+      userId: leaderUserId,
+      programId: team.programId,
+      stage: 'REGISTRATION',
+      event: 'IBCC',
+      type: 'PAYMENT',
+      Files: {
+        create: {
+          filePath: uploadResult.webViewLink,
+          gdriveId: uploadResult.fileId,
+          fileType: file.mimetype,
+          fileSize: file.size,
+        },
+      },
+    },
+    include: {
+      Files: true,
+    },
+  });
+
+  return {
+    submissionId: submission.id,
+    stage: submission.stage,
+    type: submission.type,
+    submittedAt: submission.submittedAt,
+    fileUrl: uploadResult.webViewLink,
+    gdriveId: uploadResult.fileId,
+  };
+}
+
+export async function submitScore(
+  judgeId: number,
+  teamId: number,
+  score: number,
+  comment?: string,
+) {
+  const team = await prisma.team.findUnique({ where: { id: teamId } });
+  if (!team) throw new Error('Team not found.');
+
+  const existing = await prisma.semifinalScore.findFirst({
+    where: { teamId, judgeId },
+  });
+
+  let semifinalScore;
+  if (existing) {
+    semifinalScore = await prisma.semifinalScore.update({
+      where: { id: existing.id },
+      data: { score, comment },
+    });
+  } else {
+    semifinalScore = await prisma.semifinalScore.create({
+      data: { teamId, judgeId, score, comment },
+    });
+  }
+
+  await prisma.activityLog.create({
+    data: {
+      staffId: judgeId,
+      activity: `Scored team ${team.name}: ${score}/100${comment ? ` – ${comment}` : ''}`,
+      status: 'scored',
+    },
+  });
+
+  return { semifinalScore, isUpdated: Boolean(existing) };
+}
+
+export async function getScores() {
+  const scores = await prisma.semifinalScore.findMany({
+    include: {
+      team: { select: { id: true, name: true } },
+      judge: { select: { id: true, name: true } },
+    },
+    orderBy: { score: 'desc' },
+  });
+
+  const teamScoresMap = new Map<
+    number,
+    {
+      teamId: number;
+      teamName: string;
+      scores: { judgeId: number; judgeName: string; score: number; comment: string | null }[];
+      average: number;
+    }
+  >();
+
+  for (const s of scores) {
+    if (!teamScoresMap.has(s.teamId)) {
+      teamScoresMap.set(s.teamId, {
+        teamId: s.teamId,
+        teamName: s.team.name,
+        scores: [],
+        average: 0,
+      });
+    }
+    const entry = teamScoresMap.get(s.teamId)!;
+    entry.scores.push({
+      judgeId: s.judgeId,
+      judgeName: s.judge.name,
+      score: s.score,
+      comment: s.comment,
+    });
+  }
+
+  const result = Array.from(teamScoresMap.values()).map((entry) => {
+    const avg =
+      entry.scores.reduce((sum, s) => sum + s.score, 0) / entry.scores.length;
+    return { ...entry, average: Math.round(avg * 100) / 100 };
+  });
+
+  result.sort((a, b) => b.average - a.average);
+
+  return { rankings: result };
+}
+
+export async function publishResults(qualifiedTeamIds: number[]) {
+  const allScoredTeamIds = await prisma.semifinalScore
+    .findMany({ select: { teamId: true }, distinct: ['teamId'] })
+    .then((rows: { teamId: number }[]) => rows.map((r: { teamId: number }) => r.teamId));
+
+  const eliminatedTeamIds = allScoredTeamIds.filter(
+    (id: number) => !qualifiedTeamIds.includes(id),
+  );
+
+  let qualifiedStatus = await prisma.status.findUnique({ where: { code: 'QUALIFIED_FINAL' } });
+  if (!qualifiedStatus) {
+    qualifiedStatus = await prisma.status.create({
+      data: { code: 'QUALIFIED_FINAL', description: 'Qualified to Final Round' },
+    });
+  }
+
+  let eliminatedStatus = await prisma.status.findUnique({ where: { code: 'ELIMINATED_SEMIFINAL' } });
+  if (!eliminatedStatus) {
+    eliminatedStatus = await prisma.status.create({
+      data: { code: 'ELIMINATED_SEMIFINAL', description: 'Eliminated in Semifinal' },
+    });
+  }
+
+  await prisma.team.updateMany({
+    where: { id: { in: qualifiedTeamIds } },
+    data: { status: qualifiedStatus.id },
+  });
+
+  await prisma.team.updateMany({
+    where: { id: { in: eliminatedTeamIds } },
+    data: { status: eliminatedStatus.id },
+  });
+
+  sendSemifinalResultEmails(qualifiedTeamIds, eliminatedTeamIds).catch((err) =>
+    console.error('[SEMIFINAL] Email sending error:', err),
+  );
+
+  return {
+    qualified: qualifiedTeamIds,
+    eliminated: eliminatedTeamIds,
+  };
+}
+
