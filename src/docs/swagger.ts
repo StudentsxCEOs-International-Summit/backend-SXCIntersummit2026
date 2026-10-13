@@ -1326,7 +1326,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
         responses: {
           200: { description: 'Payment verified successfully.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
           400: { description: 'Validation error.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiValidationErrorResponse' } } } },
-          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
           403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
           404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
         },
@@ -2039,8 +2039,9 @@ REST API documentation for **SxC International Summit 2026** backend system.
           },
         },
       },
-    }
-  }
+    },
+  },
+}
 
 export const swaggerUiOptions = {
   customSiteTitle: 'SxC International Summit 2026 API Docs',
