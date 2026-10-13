@@ -5,7 +5,7 @@ export interface RegistrationEmailProps {
   teamName: string;
   teamCode: string;
   memberCount: number;
-  waGroupLink: string;
+  waGroupLink?: string;
 }
 
 export function renderTeamRegistrationConfirmationEmail(props: RegistrationEmailProps): string {
@@ -31,19 +31,6 @@ export function renderTeamRegistrationConfirmationEmail(props: RegistrationEmail
       <p style="font-size: 12px; color: #64748b; margin: 8px 0 0 0;">
         Please keep this code safe. It will be your identifier throughout the competition.
       </p>
-    </div>
-
-    <div style="background-color: #f0fdf4; border-left: 4px solid #16a34a; border-radius: 8px; padding: 18px; margin: 24px 0;">
-      <h3 style="margin: 0 0 8px 0; font-size: 15px; color: #166534; font-weight: 700;">
-        Preliminary Stage WhatsApp Group
-      </h3>
-      <p style="margin: 0 0 14px 0; font-size: 14px; color: #15803d; line-height: 1.5;">
-        All official technical briefings, case distributions, and Q&A announcements for the Preliminary Round will be shared through this group.
-      </p>
-      <a href="${props.waGroupLink}" target="_blank" rel="noopener noreferrer" 
-         style="display: inline-block; background-color: #16a34a; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 13px; padding: 10px 20px; border-radius: 6px;">
-        Join Official Preliminary WA Group &rarr;
-      </a>
     </div>
 
     <div style="margin: 24px 0; padding-top: 16px; border-top: 1px solid #e2e8f0;">
