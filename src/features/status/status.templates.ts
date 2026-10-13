@@ -24,6 +24,8 @@ function getColor(status: string) {
 
 export function renderStatusChangeEmail(data: StatusEmailData): string {
   const color = getColor(data.newStatus);
+  const isFinalQualified = data.newStatus === "QUALIFIED_FINAL";
+  const headerHeading = isFinalQualified ? "Congratulations Finalist!" : "Team Status Update";
 
   const contentHtml = `
     <h2 style="margin: 0 0 16px 0; color: #0f172a; font-size: 18px; font-weight: 600;">Hello, ${data.leaderName}</h2>
@@ -38,8 +40,8 @@ export function renderStatusChangeEmail(data: StatusEmailData): string {
   `;
 
   return renderEmailTemplate({
-    title: `Status Update – ${data.teamName}`,
-    headerHeading: "Team Status Update",
+    title: isFinalQualified ? "Congratulations! Qualified for the Final" : `Status Update – ${data.teamName}`,
+    headerHeading,
     contentHtml,
     footerNote: "This email was sent to notify your team of an official competition status update.",
   });

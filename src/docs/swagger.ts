@@ -58,6 +58,10 @@ REST API documentation for **SxC International Summit 2026** backend system.
       description: 'Application configuration, registration deadline info, and email scheduler trigger',
     },
     {
+      name: 'Admin - Competition',
+      description: 'Competition management, team dashboard, and preliminary round evaluation (ADMIN-01)',
+    },
+    {
       name: 'IBCC - Team Registration & Preliminary',
       description: 'IBCC 2026 team registration (IBCC-01), member activation via magic link (IBCC-MEMBER-01), team profile dashboard (IBCC-01b), and preliminary slide deck submission (IBCC-03)',
     },
@@ -1777,6 +1781,63 @@ REST API documentation for **SxC International Summit 2026** backend system.
         description: 'Manually triggers the email scheduler to send deadline reminders and payment reminders. Can be used as a webhook endpoint for cronjob.org.',
         responses: {
           200: { description: 'Email scheduler triggered.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+        },
+      },
+    },
+    // ADMIN — Competition Management
+    '/api/admin/competition/teams': {
+      get: {
+        tags: ['Admin - Competition'],
+        summary: 'Get competition teams dashboard',
+        description: 'Admin retrieves all competition teams with leader, member details, and current statuses.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        responses: {
+          200: {
+            description: 'Teams retrieved successfully.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } },
+          },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/admin/competition/preliminary/{teamId}': {
+      put: {
+        tags: ['Admin - Competition'],
+        summary: 'Update team preliminary evaluation status (ADMIN-01 & IBCC-05)',
+        description: 'Admin evaluates a team in the preliminary round (passed/failed), updates the team score, logs activity, and sends automated email notification to the team leader.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        parameters: [
+          {
+            name: 'teamId',
+            in: 'path',
+            required: true,
+            schema: { type: 'integer' },
+            description: 'The ID of the team to evaluate',
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['status'],
+                properties: {
+                  status: { type: 'string', enum: ['passed', 'failed'], example: 'passed' },
+                  score: { type: 'number', example: 88.5, description: 'Optional preliminary score' },
+                  feedback: { type: 'string', example: 'Great paper structure and insight.', description: 'Feedback sent in email if failed' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Preliminary status updated successfully.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+          400: { description: 'Validation error.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiValidationErrorResponse' } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
         },
       },
     },
