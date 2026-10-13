@@ -6,10 +6,12 @@ import accessCodeRouter from '../features/accesscode/accesscode.route'
 import semifinalRouter from '../features/semifinal/semifinal.route'
 import configRouter from '../features/config/config.route'
 import ibccRouter from '../features/ibcc/ibcc.route'
+import adminDriveRouter from '../features/admin/admin-drive.route'
 
 const routes = Router()
 
 routes.use('/auth', authRouter)
+routes.use('/admin/drive', adminDriveRouter)
 routes.use('/upload', uploadRouter)
 routes.use('/finance', financeRouter)
 routes.use('/access-code', accessCodeRouter)

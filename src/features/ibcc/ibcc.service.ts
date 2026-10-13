@@ -47,8 +47,6 @@ export async function registerTeam(
     throw new Error('Team name is already taken. Please choose another name.');
   }
 
-  const waGroupLink = 'https://chat.whatsapp.com/IBCC2026PreliminaryStageInvite';
-
   const result = await prisma.$transaction(async (tx) => {
     let ibccProgram = await tx.program.findUnique({ where: { name: 'IBCC' } });
     if (!ibccProgram) {
@@ -147,13 +145,6 @@ export async function registerTeam(
       },
     });
 
-    const pendingMemberInvitations: {
-      name: string;
-      email: string;
-      token: string;
-      code: string;
-    }[] = [];
-
     for (const memberInput of input.members || []) {
       const email = memberInput.email.toLowerCase().trim();
       let targetUser = await tx.user.findUnique({ where: { email } });
@@ -183,28 +174,6 @@ export async function registerTeam(
           institution: memberInput.institution,
           yearOfStudy: memberInput.yearOfStudy,
         },
-      });
-
-      const token = crypto.randomBytes(32).toString('hex');
-      const fallbackCode = Math.floor(100000 + Math.random() * 900000).toString();
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-
-      await tx.teamMemberInvitation.create({
-        data: {
-          teamId: team.id,
-          userId: targetUser.id,
-          email,
-          token,
-          code: fallbackCode,
-          expiresAt,
-        },
-      });
-
-      pendingMemberInvitations.push({
-        name: targetUser.name,
-        email,
-        token,
-        code: fallbackCode,
       });
     }
 
@@ -288,8 +257,10 @@ export async function registerTeam(
       team,
       teamCode: selectedCodeRecord.code,
       teamFolderId,
-      pendingMemberInvitations,
     };
+  }, {
+    maxWait: 15000,
+    timeout: 60000,
   });
 
   const leaderEmailHtml = renderTeamRegistrationConfirmationEmail({
@@ -297,7 +268,6 @@ export async function registerTeam(
     teamName: result.team.name,
     teamCode: result.teamCode,
     memberCount: 1 + (input.members || []).length,
-    waGroupLink,
   });
 
   sendMail({
@@ -308,28 +278,6 @@ export async function registerTeam(
     console.error(`[IBCC] Leader confirmation email error: ${err.message}`);
   });
 
-  const clientBaseUrl = process.env.CLIENT_URL || env.CORS_ORIGIN || 'https://intersummit.com';
-
-  for (const invitation of result.pendingMemberInvitations) {
-    const claimUrl = `${clientBaseUrl}/claim-team?token=${invitation.token}`;
-    const memberEmailHtml = renderMemberInvitationEmail({
-      memberName: invitation.name,
-      leaderName: leaderUser.name,
-      teamName: result.team.name,
-      token: invitation.token,
-      code: invitation.code,
-      claimUrl,
-    });
-
-    sendMail({
-      to: invitation.email,
-      subject: `Team Invitation: ${result.team.name} | IBCC 2026`,
-      html: memberEmailHtml,
-    }).catch((err) => {
-      console.error(`[IBCC] Member invitation email error (${invitation.email}): ${err.message}`);
-    });
-  }
-
   return {
     teamId: result.team.id,
     teamName: result.team.name,
@@ -338,7 +286,7 @@ export async function registerTeam(
     driveFolderUrl: `https://drive.google.com/drive/folders/${result.teamFolderId}`,
     status: 'REGISTERED',
     memberCount: 1 + (input.members || []).length,
-    waGroupLink,
+    waGroupLink: null,
   };
 }
 
@@ -514,6 +462,10 @@ export async function getMyTeam(userId: number) {
     (s) => s.stage === 'PREELIM' && s.type === 'TASK',
   );
 
+  const paymentSubmission = team.submissionTeam.find(
+    (s) => s.type === 'PAYMENT',
+  );
+
   const statusCode = team.statuscode?.code || 'PENDING_PAYMENT';
   const isQualified =
     statusCode === 'QUALIFIED_FINAL' || statusCode === 'QUALIFIED_SEMIFINAL';
@@ -535,6 +487,15 @@ export async function getMyTeam(userId: number) {
       ? 'SEMIFINAL'
       : 'REGISTRATION';
 
+  let paymentStatus = 'NOT_SUBMITTED';
+  if (statusCode === 'PAID') {
+    paymentStatus = 'PAID';
+  } else if (statusCode === 'REJECTED_PAYMENT') {
+    paymentStatus = 'REJECTED';
+  } else if (paymentSubmission) {
+    paymentStatus = 'PENDING_VERIFICATION';
+  }
+
   return {
     id: team.id,
     name: team.name,
@@ -542,6 +503,12 @@ export async function getMyTeam(userId: number) {
     status: preliminarySubmission ? 'PRELIMINARY_SUBMITTED' : statusCode,
     isLeader,
     competitionStage,
+    payment: {
+      status: paymentStatus,
+      isUploaded: Boolean(paymentSubmission),
+      fileUrl: paymentSubmission?.Files?.[0]?.filePath || null,
+      submittedAt: paymentSubmission?.submittedAt || null,
+    },
     selectionResult: {
       isAnnounced: isQualified || isEliminated,
       isQualified,
@@ -556,8 +523,10 @@ export async function getMyTeam(userId: number) {
     members: nonLeaderMembers,
     submissions: {
       requirementsCompleted: team.submissionTeam.some(
-        (s) => s.stage === 'REGISTRATION',
+        (s) => s.stage === 'REGISTRATION' && s.type !== 'PAYMENT',
       ),
+      paymentSubmitted: Boolean(paymentSubmission),
+      paymentSubmittedAt: paymentSubmission?.submittedAt || null,
       preliminaryOutputSubmitted: Boolean(preliminarySubmission),
       preliminarySubmittedAt: preliminarySubmission?.submittedAt || null,
     },

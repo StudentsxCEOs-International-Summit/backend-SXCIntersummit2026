@@ -80,4 +80,3 @@ if (env.NODE_ENV !== 'test') {
 }
 
 export default app
-

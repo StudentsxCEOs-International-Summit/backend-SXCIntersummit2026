@@ -65,6 +65,10 @@ REST API documentation for **SxC International Summit 2026** backend system.
       name: 'IBCC - Team Registration & Preliminary',
       description: 'IBCC 2026 team registration (IBCC-01), member activation via magic link (IBCC-MEMBER-01), team profile dashboard (IBCC-01b), and preliminary slide deck submission (IBCC-03)',
     },
+    {
+      name: 'Admin - Google Drive Storage',
+      description: 'Google Drive OAuth 2.0 authorization setup and callback handler for storage token generation',
+    },
   ],
   components: {
     securitySchemes: {
@@ -266,6 +270,8 @@ REST API documentation for **SxC International Summit 2026** backend system.
           teamId: { type: 'integer', example: 42 },
           teamName: { type: 'string', example: 'The Innovators' },
           teamCode: { type: 'string', example: 'MYR6JD' },
+          driveFolderId: { type: 'string', example: '1A2b3c4D5e6F7g8H9i0J' },
+          driveFolderUrl: { type: 'string', example: 'https://drive.google.com/drive/folders/1A2b3c4D5e6F7g8H9i0J' },
           status: { type: 'string', example: 'REGISTERED' },
           memberCount: { type: 'integer', example: 2 },
           waGroupLink: { type: 'string', example: 'https://chat.whatsapp.com/IBCC2026PreliminaryStageInvite' },
@@ -291,6 +297,15 @@ REST API documentation for **SxC International Summit 2026** backend system.
           status: { type: 'string', example: 'PRELIMINARY_SUBMITTED' },
           isLeader: { type: 'boolean', example: true },
           competitionStage: { type: 'string', example: 'PREELIM' },
+          payment: {
+            type: 'object',
+            properties: {
+              status: { type: 'string', example: 'PENDING_VERIFICATION' },
+              isUploaded: { type: 'boolean', example: true },
+              fileUrl: { type: 'string', nullable: true, example: 'https://drive.google.com/file/d/.../view' },
+              submittedAt: { type: 'string', format: 'date-time', nullable: true, example: '2026-10-15T10:00:00.000Z' },
+            },
+          },
           selectionResult: {
             type: 'object',
             properties: {
@@ -325,6 +340,8 @@ REST API documentation for **SxC International Summit 2026** backend system.
             type: 'object',
             properties: {
               requirementsCompleted: { type: 'boolean', example: true },
+              paymentSubmitted: { type: 'boolean', example: true },
+              paymentSubmittedAt: { type: 'string', format: 'date-time', nullable: true, example: '2026-10-15T10:00:00.000Z' },
               preliminaryOutputSubmitted: { type: 'boolean', example: true },
               preliminarySubmittedAt: { type: 'string', format: 'date-time', example: '2026-10-15T10:30:00.000Z' },
             },
@@ -337,7 +354,25 @@ REST API documentation for **SxC International Summit 2026** backend system.
           submissionId: { type: 'integer', example: 105 },
           stage: { type: 'string', example: 'PREELIM' },
           submittedAt: { type: 'string', format: 'date-time', example: '2026-10-15T14:20:00.000Z' },
-          fileUrl: { type: 'string', example: '/uploads/preliminary/1728512345-abc123.pdf' },
+          fileUrl: { type: 'string', example: 'https://drive.google.com/file/d/1xYz.../view' },
+          gdriveId: { type: 'string', example: '1xYz...' },
+        },
+      },
+      UploadPaymentResponse: {
+        type: 'object',
+        properties: {
+          submission: { type: 'object' },
+          gdriveId: { type: 'string', example: '1xYz...' },
+          viewUrl: { type: 'string', example: 'https://drive.google.com/file/d/1xYz.../view' },
+        },
+      },
+      UploadSlidesResponse: {
+        type: 'object',
+        properties: {
+          slideDeck: { type: 'object' },
+          submission: { type: 'object' },
+          gdriveId: { type: 'string', example: '1xYz...' },
+          viewUrl: { type: 'string', example: 'https://drive.google.com/file/d/1xYz.../view' },
         },
       },
     },
@@ -1159,6 +1194,93 @@ REST API documentation for **SxC International Summit 2026** backend system.
                           },
                         },
                       },
+    '/api/auth/google': {
+      get: {
+        tags: ['Auth - Google OAuth'],
+        summary: 'Initiate Google OAuth Flow',
+        description: 'Redirects the user to Google OAuth consent page, or returns the authorization URL if requested with `?json=true` or `Accept: application/json`.',
+        parameters: [
+          {
+            name: 'state',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Optional state string or client redirect URI to preserve across OAuth handshake',
+          },
+          {
+            name: 'json',
+            in: 'query',
+            required: false,
+            schema: { type: 'boolean' },
+            description: 'Set to true to receive the Google consent URL as a JSON response instead of a 302 redirect',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Google OAuth authorization URL successfully generated.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Google OAuth authorization URL generated.' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        url: { type: 'string', example: 'https://accounts.google.com/o/oauth2/v2/auth?...' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          302: {
+            description: 'Direct redirect to Google OAuth login screen.',
+          },
+        },
+      },
+    },
+    '/api/auth/google/callback': {
+      get: {
+        tags: ['Auth - Google OAuth'],
+        summary: 'Google OAuth Callback Handler',
+        description: 'Endpoint invoked by Google redirect with authorization code. Exchanges code for user info, activates user session, and issues session cookie.',
+        parameters: [
+          {
+            name: 'code',
+            in: 'query',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Authorization code provided by Google OAuth',
+          },
+          {
+            name: 'state',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Optional redirect URL or state',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Authentication successful. User session established.',
+          },
+          302: {
+            description: 'Redirect to state URL if an HTTP redirect URL was provided.',
+          },
+          401: {
+            description: 'Google code exchange failed or unauthorized.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ApiErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
                     },
                   },
                 },
@@ -1201,8 +1323,8 @@ REST API documentation for **SxC International Summit 2026** backend system.
     },    // UPLOAD — File Submissions    '/api/upload/payment': {
       post: {
         tags: ['Upload - File Submissions'],
-        summary: 'Upload payment proof (IBCC-06)',
-        description: 'Uploads a payment proof image for a team. Accepted formats: JPG, PNG, WebP, GIF (max 5 MB).',
+        summary: 'Upload semifinal payment proof to Google Drive (IBCC-06)',
+        description: 'Upload payment receipt image for verified semifinalist team. Streams directly to Google Drive Payment subfolder and creates a Submission record. Team identity is automatically resolved from authenticated leader token if teamId is omitted.',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         requestBody: {
           required: true,
@@ -1210,10 +1332,10 @@ REST API documentation for **SxC International Summit 2026** backend system.
             'multipart/form-data': {
               schema: {
                 type: 'object',
-                required: ['file', 'teamId'],
+                required: ['file'],
                 properties: {
-                  file: { type: 'string', format: 'binary', description: 'Payment proof image file' },
-                  teamId: { type: 'integer', example: 1, description: 'Team ID' },
+                  file: { type: 'string', format: 'binary', description: 'Payment proof image file (JPG, PNG, WEBP, max 5MB)' },
+                  teamId: { type: 'integer', example: 1, description: 'Optional team ID. Inferred from authenticated token if omitted.' },
                 },
               },
             },
@@ -1221,40 +1343,21 @@ REST API documentation for **SxC International Summit 2026** backend system.
         },
         responses: {
           201: {
-            description: 'Payment proof uploaded successfully.',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } },
-          },
-          400: { description: 'Missing file or invalid teamId.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-          404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-        },
-      },
-    },
-    '/api/upload/requirement': {
-      post: {
-        tags: ['Upload - File Submissions'],
-        summary: 'Upload requirement proof (twibbon / story)',
-        description: 'Uploads a twibbon or IG story screenshot as requirement proof. Accepted formats: JPG, PNG, WebP, GIF (max 5 MB).',
-        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
-        requestBody: {
-          required: true,
-          content: {
-            'multipart/form-data': {
-              schema: {
-                type: 'object',
-                required: ['file', 'teamId', 'type'],
-                properties: {
-                  file: { type: 'string', format: 'binary', description: 'Requirement proof image file' },
-                  teamId: { type: 'integer', example: 1 },
-                  type: { type: 'string', enum: ['twibbon', 'story'], example: 'twibbon' },
+            description: 'Payment proof uploaded successfully to Google Drive.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Payment proof uploaded successfully to Google Drive.' },
+                    data: { $ref: '#/components/schemas/UploadPaymentResponse' },
+                  },
                 },
               },
             },
           },
-        },
-        responses: {
-          201: { description: 'Requirement proof uploaded successfully.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
-          400: { description: 'Missing file, invalid teamId, or invalid type.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          400: { description: 'Missing file or invalid teamId.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
           401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
           404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
         },
@@ -1263,8 +1366,8 @@ REST API documentation for **SxC International Summit 2026** backend system.
     '/api/upload/slides': {
       post: {
         tags: ['Upload - File Submissions'],
-        summary: 'Upload 5-slide deck (IBCC-09)',
-        description: 'Uploads a semifinal presentation deck. Accepted formats: PDF, PPT, PPTX, images (max 20 MB, max 5 slides).',
+        summary: 'Upload semifinal 5-slide deck to Google Drive (IBCC-09)',
+        description: 'Upload 5-slide presentation deck (PDF or PPTX, max 20MB) to Google Drive Semifinal Slides folder. Team identity is automatically resolved from authenticated leader token if teamId is omitted.',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         requestBody: {
           required: true,
@@ -1272,23 +1375,39 @@ REST API documentation for **SxC International Summit 2026** backend system.
             'multipart/form-data': {
               schema: {
                 type: 'object',
-                required: ['file', 'teamId'],
+                required: ['file'],
                 properties: {
-                  file: { type: 'string', format: 'binary', description: 'Slide deck file (PDF or PPTX)' },
-                  teamId: { type: 'integer', example: 1 },
+                  file: { type: 'string', format: 'binary', description: 'Slide deck file (PDF or PPTX, max 20MB)' },
+                  teamId: { type: 'integer', example: 1, description: 'Optional team ID. Inferred from authenticated token if omitted.' },
                 },
               },
             },
           },
         },
         responses: {
-          201: { description: 'Slide deck uploaded successfully.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+          201: {
+            description: 'Slide deck uploaded successfully to Google Drive.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Slide deck uploaded successfully to Google Drive (max 5 slides).' },
+                    data: { $ref: '#/components/schemas/UploadSlidesResponse' },
+                  },
+                },
+              },
+            },
+          },
           400: { description: 'Missing file or invalid teamId.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
           401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
           404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
         },
       },
-    },    // FINANCE — Verification    '/api/finance/verify': {
+    },
+    // FINANCE — Verification
+    '/api/finance/verify': {
       post: {
         tags: ['Finance - Verification'],
         summary: 'Verify payment proof (ADMIN-02)',
@@ -1944,7 +2063,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
       post: {
         tags: ['IBCC - Team Registration & Preliminary'],
         summary: 'Upload preliminary slide deck (IBCC-03)',
-        description: 'Team leader uploads their preliminary case submission slide deck (PDF or PPTX, maximum 15MB).',
+        description: 'Team leader uploads their preliminary case submission slide deck (PDF or PPTX, maximum 20MB). Team identity is automatically inferred from authenticated leader token.',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         requestBody: {
           required: true,
@@ -1952,10 +2071,10 @@ REST API documentation for **SxC International Summit 2026** backend system.
             'multipart/form-data': {
               schema: {
                 type: 'object',
-                required: ['slideDeck'],
+                required: ['file'],
                 properties: {
                   teamId: { type: 'integer', description: 'Optional team ID if inferred from leader', example: 42 },
-                  slideDeck: { type: 'string', format: 'binary', description: 'Preliminary slide deck file (PDF or PPTX, max 15MB)' },
+                  file: { type: 'string', format: 'binary', description: 'Preliminary slide deck file (PDF or PPTX, max 20MB)' },
                 },
               },
             },
@@ -1987,6 +2106,43 @@ REST API documentation for **SxC International Summit 2026** backend system.
           },
           403: {
             description: 'Forbidden: user is not the leader of an active IBCC team.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/api/admin/drive/setup': {
+      get: {
+        tags: ['Admin - Google Drive Storage'],
+        summary: 'Initiate Google Drive OAuth 2.0 flow',
+        description: 'Redirects administrator to Google OAuth 2.0 consent screen with offline access and prompt=consent to generate a new refresh token for Google Drive integration.',
+        responses: {
+          302: {
+            description: 'Redirect to Google OAuth 2.0 authorization URL.',
+          },
+        },
+      },
+    },
+    '/api/admin/drive/callback': {
+      get: {
+        tags: ['Admin - Google Drive Storage'],
+        summary: 'Google Drive OAuth 2.0 callback',
+        description: 'Receives the OAuth authorization code, exchanges it for access and refresh tokens, and displays instructions to configure GOOGLE_DRIVE_REFRESH_TOKEN in .env.',
+        parameters: [
+          {
+            name: 'code',
+            in: 'query',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Authorization code returned from Google OAuth',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'OAuth authorization successful. Refresh token displayed.',
+          },
+          400: {
+            description: 'Missing authorization code or OAuth exchange failed.',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
           },
         },
