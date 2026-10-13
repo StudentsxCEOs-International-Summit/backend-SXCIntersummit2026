@@ -5,17 +5,37 @@ import { env } from "../../configs/env";
 import { ok, badRequest, internalError, notFound } from "../../utils/response";
 import { uploadBufferToDrive } from "../../services/storage.service";
 
-// POST /upload/payment (IBCC-06)
+async function resolveTeamFromRequest(req: Request) {
+  const authUser = (req as any).user;
+  const teamIdInput = req.body.teamId ? Number(req.body.teamId) : undefined;
+
+  if (teamIdInput) {
+    const team = await prisma.team.findUnique({ where: { id: teamIdInput } });
+    if (team) return team;
+  }
+
+  if (authUser?.id) {
+    return prisma.team.findFirst({
+      where: {
+        OR: [
+          { leaderId: authUser.id },
+          { TeamMember: { some: { userId: authUser.id } } },
+        ],
+      },
+    });
+  }
+
+  return null;
+}
+
 export async function uploadPaymentProof(req: Request, res: Response) {
   try {
     const file = req.file;
     if (!file) return badRequest(res, "No file uploaded. Please attach a payment proof image.");
 
-    const teamId = Number(req.body.teamId);
-    if (!teamId) return badRequest(res, "teamId is required.");
-
-    const team = await prisma.team.findUnique({ where: { id: teamId } });
-    if (!team) return notFound(res, "Team not found.");
+    const team = await resolveTeamFromRequest(req);
+    if (!team) return notFound(res, "No registered team found for this authenticated user.");
+    const teamId = team.id;
 
     const targetFolderId =
       env.GOOGLE_DRIVE_FOLDER_PAYMENT_ID ||
@@ -77,11 +97,9 @@ export async function uploadSlideDeck(req: Request, res: Response) {
     const file = req.file;
     if (!file) return badRequest(res, "No file uploaded. Please attach a slide deck (PDF/PPTX).");
 
-    const teamId = Number(req.body.teamId);
-    if (!teamId) return badRequest(res, "teamId is required.");
-
-    const team = await prisma.team.findUnique({ where: { id: teamId } });
-    if (!team) return notFound(res, "Team not found.");
+    const team = await resolveTeamFromRequest(req);
+    if (!team) return notFound(res, "No registered team found for this authenticated user.");
+    const teamId = team.id;
 
     const targetFolderId =
       env.GOOGLE_DRIVE_FOLDER_SEMIFINAL_SLIDES_ID ||
@@ -103,7 +121,6 @@ export async function uploadSlideDeck(req: Request, res: Response) {
       targetFolderId,
     );
 
-    // Save to SlideDeck model
     const slideDeck = await prisma.slideDeck.create({
       data: {
         teamId,
@@ -111,7 +128,6 @@ export async function uploadSlideDeck(req: Request, res: Response) {
       },
     });
 
-    // Also create a Submission record
     const submission = await prisma.submission.create({
       data: {
         teamId,
