@@ -6,7 +6,7 @@ import {
   renderEmailTemplate,
   getMailTransporter,
 } from "../src/services/mail.service";
-import { renderStatusChangeEmail } from "../src/features/status/status.templates";
+import { renderStatusChangeEmail } from "../src/features/ibcc/ibcc.templates";
 
 const TARGET_EMAIL = "quykuycuy@gmail.com";
 
