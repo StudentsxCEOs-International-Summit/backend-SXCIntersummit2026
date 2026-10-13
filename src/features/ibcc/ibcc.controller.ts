@@ -12,12 +12,15 @@ import {
   submitScore,
   getScores,
   publishResults,
+  getAllTeamsForAdmin,
+  evaluatePreliminaryRound,
   RegistrationUploadedFiles,
 } from './ibcc.service';
 import {
   RegisterTeamInput,
   SubmitScoreInput,
   PublishResultsInput,
+  UpdatePreliminaryStatusInput,
 } from './ibcc.schema';
 
 const REQUIRED_UPLOAD_FIELDS = [
@@ -237,4 +240,38 @@ export async function publishResultsHandler(req: AuthRequest, res: Response) {
     return internalError(res, error.message || 'Failed to publish results.');
   }
 }
+
+export async function getAdminTeamsHandler(_req: AuthRequest, res: Response) {
+  try {
+    const teams = await getAllTeamsForAdmin();
+    return ok(res, teams, 'Teams retrieved successfully.');
+  } catch (error: any) {
+    console.error('[IBCC] getAdminTeamsHandler error:', error.message);
+    return internalError(res, 'Failed to retrieve teams.');
+  }
+}
+
+export async function updatePreliminaryStatusHandler(req: AuthRequest, res: Response) {
+  try {
+    const teamId = Number(req.params.teamId);
+    const { status, feedback, score } = req.body as UpdatePreliminaryStatusInput;
+
+    const updatedTeam = await evaluatePreliminaryRound(
+      teamId,
+      status,
+      feedback,
+      score,
+      req.user?.id ? Number(req.user.id) : undefined,
+    );
+
+    return ok(res, updatedTeam, 'Preliminary status updated successfully.');
+  } catch (error: any) {
+    console.error('[IBCC] updatePreliminaryStatusHandler error:', error.message);
+    if (error.message?.includes('not found')) {
+      return notFound(res, error.message);
+    }
+    return internalError(res, error.message || 'Failed to update preliminary status.');
+  }
+}
+
 

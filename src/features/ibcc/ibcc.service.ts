@@ -10,6 +10,7 @@ import {
 } from '../../services/storage.service';
 import {
   renderTeamRegistrationConfirmationEmail,
+  renderPreliminaryEvaluationEmail,
 } from './ibcc.templates';
 import { RegisterTeamInput } from './ibcc.schema';
 import { sendSemifinalResultEmails } from './ibcc.status';
@@ -756,4 +757,110 @@ export async function publishResults(qualifiedTeamIds: number[]) {
     eliminated: eliminatedTeamIds,
   };
 }
+
+export async function getAllTeamsForAdmin() {
+  const teams = await prisma.team.findMany({
+    include: {
+      leader: { select: { id: true, name: true, email: true, institution: true, whatsapp: true } },
+      TeamMember: {
+        include: {
+          user: { select: { id: true, name: true, email: true, institution: true, whatsapp: true } },
+        },
+      },
+      statuscode: true,
+      Submission: {
+        include: {
+          Files: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  return teams;
+}
+
+export async function evaluatePreliminaryRound(
+  teamId: number,
+  status: 'passed' | 'failed',
+  feedback?: string,
+  score?: number,
+  staffId?: number,
+) {
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    include: { leader: true },
+  });
+
+  if (!team) {
+    throw new Error('Team not found.');
+  }
+
+  const newStatusCode = status === 'passed' ? 'PASSED_PRELIMINARY' : 'FAILED_PRELIMINARY';
+
+  let statusRecord = await prisma.status.findUnique({ where: { code: newStatusCode } });
+  if (!statusRecord) {
+    statusRecord = await prisma.status.create({
+      data: {
+        code: newStatusCode,
+        description: status === 'passed' ? 'Passed Preliminary Round' : 'Failed Preliminary Round',
+      },
+    });
+  }
+
+  const updatedTeam = await prisma.team.update({
+    where: { id: teamId },
+    data: {
+      status: statusRecord.id,
+      score: score ?? team.score,
+    },
+    include: { statuscode: true, leader: true },
+  });
+
+  if (staffId) {
+    await prisma.activityLog.create({
+      data: {
+        staffId,
+        activity: `Evaluated team ${team.name} as ${status} with score ${score ?? team.score ?? 'N/A'}`,
+        status,
+      },
+    });
+  }
+
+  if (team.leader?.email) {
+    const subject =
+      status === 'passed'
+        ? '[SXC Intersummit 2026] Congratulations! You passed the Preliminary Round!'
+        : '[SXC Intersummit 2026] Preliminary Round Results';
+
+    const html = renderPreliminaryEvaluationEmail({
+      leaderName: team.leader.name || 'Participant',
+      teamName: team.name,
+      status,
+      score,
+      feedback,
+    });
+
+    const mailResult = await sendMail({
+      to: team.leader.email,
+      subject,
+      html,
+      text:
+        status === 'passed'
+          ? `Congratulations! Your team ${team.name} has passed the Preliminary Round.`
+          : `Thank you for participating. Your team ${team.name} did not advance past the Preliminary Round.`,
+    });
+
+    await prisma.emailLog.create({
+      data: {
+        toEmail: team.leader.email,
+        subject,
+        template: status === 'passed' ? 'preliminary_passed' : 'preliminary_failed',
+        status: mailResult.success ? 'success' : 'failed',
+      },
+    });
+  }
+
+  return updatedTeam;
+}
+
 

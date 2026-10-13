@@ -16,11 +16,15 @@ import {
   submitScoreHandler,
   getScoresHandler,
   publishResultsHandler,
+  getAdminTeamsHandler,
+  updatePreliminaryStatusHandler,
 } from './ibcc.controller';
 import {
   registerTeamSchema,
   submitScoreSchema,
   publishResultsSchema,
+  teamIdParamSchema,
+  updatePreliminaryStatusSchema,
 } from './ibcc.schema';
 
 const ibccRouter = Router();
@@ -82,4 +86,24 @@ ibccRouter.post(
   publishResultsHandler,
 );
 
+// Admin team management and preliminary round evaluation
+ibccRouter.get(
+  '/admin/teams',
+  requireAuth,
+  requireAdmin,
+  getAdminTeamsHandler,
+);
+
+ibccRouter.put(
+  '/admin/preliminary/:teamId',
+  requireAuth,
+  requireAdmin,
+  validateRequest({
+    params: teamIdParamSchema,
+    body: updatePreliminaryStatusSchema,
+  }),
+  updatePreliminaryStatusHandler,
+);
+
 export default ibccRouter;
+

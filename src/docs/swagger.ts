@@ -1963,11 +1963,11 @@ REST API documentation for **SxC International Summit 2026** backend system.
         },
       },
     },
-    '/api/admin/competition/teams': {
+    '/api/ibcc/admin/teams': {
       get: {
-        tags: ['Admin - Competition'],
-        summary: 'Get competition teams dashboard',
-        description: 'Admin retrieves all competition teams with leader, member details, and current statuses.',
+        tags: ['IBCC - Team Registration & Management'],
+        summary: 'Get all registered teams dashboard',
+        description: 'Admin retrieves all IBCC teams with leader, member details, submissions, and statuses.',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         responses: {
           200: {
@@ -1985,9 +1985,9 @@ REST API documentation for **SxC International Summit 2026** backend system.
         },
       },
     },
-    '/api/admin/competition/preliminary/{teamId}': {
+    '/api/ibcc/admin/preliminary/{teamId}': {
       put: {
-        tags: ['Admin - Competition'],
+        tags: ['IBCC - Team Registration & Management'],
         summary: 'Update team preliminary evaluation status',
         description: 'Admin evaluates a team in the preliminary round (passed/failed), updates the team score, logs activity, and sends automated email notification to the team leader.',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
@@ -2039,8 +2039,8 @@ REST API documentation for **SxC International Summit 2026** backend system.
           },
         },
       },
-    },
-}
+    }
+  }
 
 export const swaggerUiOptions = {
   customSiteTitle: 'SxC International Summit 2026 API Docs',

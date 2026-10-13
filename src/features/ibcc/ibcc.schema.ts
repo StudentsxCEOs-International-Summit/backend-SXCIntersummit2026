@@ -82,6 +82,18 @@ export const publishResultsSchema = z.object({
   qualifiedTeamIds: z.array(z.coerce.number().int().positive()).min(1, "At least 1 qualified team is required"),
 });
 
+export const teamIdParamSchema = z.object({
+  teamId: z.coerce.number().int().positive('teamId must be a positive integer'),
+});
+
+export const updatePreliminaryStatusSchema = z.object({
+  status: z.literal('passed').or(z.literal('failed')),
+  feedback: z.string().optional(),
+  score: z.coerce.number().min(0, 'Score cannot be negative').max(100, 'Score cannot exceed 100').optional(),
+});
+
 export type SubmitScoreInput = z.infer<typeof submitScoreSchema>;
 export type PublishResultsInput = z.infer<typeof publishResultsSchema>;
+export type UpdatePreliminaryStatusInput = z.infer<typeof updatePreliminaryStatusSchema>;
+
 
