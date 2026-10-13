@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import prisma from '../../configs/db';
 import { ok, badRequest, internalError, notFound } from '../../utils/response';
 import { AuthRequest } from '../../middlewares/auth.middleware';
-import { sendMail } from '../../services/mail.service';
+import { sendMail, renderEmailTemplate } from '../../services/mail.service';
 
 function generateCode(): string {
   return crypto.randomBytes(4).toString('hex').toUpperCase();
@@ -77,11 +77,27 @@ export async function verifyPayment(req: AuthRequest, res: Response) {
         });
 
         const subject = '[SXC Intersummit 2026] Payment Verified & Semifinal Access Code';
-        const html = `<h3>Congratulations ${team.leader.name}!</h3>
-          <p>Your payment for team <b>${team.name}</b> has been successfully verified.</p>
-          <p>Here is your Semifinal Access Code: <b>${code}</b></p>
-          <p>Please use this code along with your Team ID (${team.id}) to log in and upload your Semifinal slide deck.</p>
-          <p>Keep this code secret!</p>`;
+        const contentHtml = `
+          <h2 style="margin: 0 0 16px 0; color: #0f172a; font-size: 18px; font-weight: 600;">Congratulations, ${team.leader.name}!</h2>
+          <p style="margin: 0 0 16px 0; line-height: 1.6; color: #475569; font-size: 15px;">
+            Your payment for team <strong>${team.name}</strong> has been successfully verified by our finance committee.
+          </p>
+          <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 18px 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
+            <p style="margin: 0 0 6px 0; color: #166534; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Your Semifinal Access Code</p>
+            <div style="display: inline-block; padding: 10px 24px; background-color: #ffffff; border: 2px dashed #10b981; border-radius: 8px; font-size: 26px; font-weight: 800; letter-spacing: 4px; color: #065f46;">
+              ${code}
+            </div>
+            <p style="margin: 10px 0 0 0; color: #15803d; font-size: 13px;">Team ID: <strong>${team.id}</strong></p>
+          </div>
+          <p style="margin: 16px 0 0 0; line-height: 1.6; color: #475569; font-size: 14px;">
+            Please keep this code confidential. You will need your Team ID and this Access Code to log in and upload your Semifinal slide deck on the summit portal.
+          </p>
+        `;
+        const html = renderEmailTemplate({
+          title: "Payment Verified",
+          headerHeading: "Payment Verified",
+          contentHtml,
+        });
 
         const mailResult = await sendMail({ to: team.leader.email, subject, html });
         
@@ -95,9 +111,24 @@ export async function verifyPayment(req: AuthRequest, res: Response) {
         });
       } else {
         const subject = '[SXC Intersummit 2026] Payment Rejected';
-        const html = `<h3>Hi ${team.leader.name},</h3>
-          <p>Unfortunately, your payment for team <b>${team.name}</b> was rejected by our finance team.</p>
-          <p>Notes: ${notes || 'Please re-upload a clear proof of payment.'}</p>`;
+        const contentHtml = `
+          <h2 style="margin: 0 0 16px 0; color: #0f172a; font-size: 18px; font-weight: 600;">Hello, ${team.leader.name}</h2>
+          <p style="margin: 0 0 16px 0; line-height: 1.6; color: #475569; font-size: 15px;">
+            Unfortunately, your payment verification for team <strong>${team.name}</strong> was rejected by our finance committee.
+          </p>
+          <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 14px 18px; border-radius: 6px; margin: 20px 0;">
+            <p style="margin: 0; color: #991b1b; font-size: 14px; font-weight: 600;">Notes from Finance:</p>
+            <p style="margin: 4px 0 0 0; color: #b91c1c; font-size: 13px;">${notes || 'Please re-upload a clear proof of payment.'}</p>
+          </div>
+          <p style="margin: 16px 0 0 0; line-height: 1.6; color: #475569; font-size: 14px;">
+            Please log in to your participant dashboard and upload a valid proof of transfer.
+          </p>
+        `;
+        const html = renderEmailTemplate({
+          title: "Payment Rejected",
+          headerHeading: "Payment Rejected",
+          contentHtml,
+        });
 
         const mailResult = await sendMail({ to: team.leader.email, subject, html });
         
