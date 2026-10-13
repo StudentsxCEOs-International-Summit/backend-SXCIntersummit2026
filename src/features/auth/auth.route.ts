@@ -62,6 +62,7 @@ authRouter.get('/me', requireAuth, AuthController.getMe)
 
 // Google OAuth Endpoints
 authRouter.get('/google', AuthController.googleAuthRedirect)
+authRouter.get('/google/gdrive-setup', AuthController.googleDriveSetupRedirect)
 
 authRouter.get(
   '/google/callback',

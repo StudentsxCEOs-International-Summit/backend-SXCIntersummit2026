@@ -7,6 +7,7 @@ import * as authService from './auth.service'
 import {
   getGoogleAuthUrl,
   getGoogleUserFromCode,
+  googleOAuthClient,
 } from '../../services/google-auth.service'
 import {
   RegisterInput,
@@ -190,6 +191,20 @@ export async function googleAuthRedirect(req: Request, res: Response) {
   }
 }
 
+export function googleDriveSetupRedirect(_req: Request, res: Response) {
+  const url = googleOAuthClient.generateAuthUrl({
+    access_type: 'offline',
+    prompt: 'consent',
+    scope: [
+      'https://www.googleapis.com/auth/userinfo.profile',
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/drive',
+    ],
+    state: 'gdrive_setup',
+  })
+  return res.redirect(url)
+}
+
 export async function googleAuthCallback(req: Request, res: Response) {
   try {
     const code = req.query.code as string | undefined
@@ -197,6 +212,43 @@ export async function googleAuthCallback(req: Request, res: Response) {
 
     if (!code) {
       return badRequest(res, 'Authorization code is missing from Google callback.')
+    }
+
+    if (state === 'gdrive_setup') {
+      const { tokens } = await googleOAuthClient.getToken(code)
+      if (!tokens.refresh_token) {
+        return res.send(`
+          <!DOCTYPE html>
+          <html>
+            <head><title>Google Drive Setup</title><meta charset="utf-8"></head>
+            <body style="font-family: system-ui, sans-serif; padding: 40px; background: #0f172a; color: #f8fafc; max-width: 650px; margin: 40px auto; border-radius: 12px; border: 1px solid #334155;">
+              <h2 style="color: #ef4444; margin-top: 0;">⚠️ Refresh Token Tidak Diberikan oleh Google</h2>
+              <p>Google mendeteksi akun ini sebelumnya sudah pernah memberikan izin.</p>
+              <p><b>Solusi (10 detik):</b></p>
+              <ol style="line-height: 1.8;">
+                <li>Buka <a href="https://myaccount.google.com/connections" target="_blank" style="color: #38bdf8;">Google Account Connections (myaccount.google.com/connections)</a>.</li>
+                <li>Cari aplikasi <b>Student x CEO Intersummit</b> dan klik <b>Hapus Akses / Delete Connection</b>.</li>
+                <li>Buka kembali tautan <a href="/api/auth/google/gdrive-setup" style="color: #38bdf8;">/api/auth/google/gdrive-setup</a> dan klik Izinkan.</li>
+              </ol>
+            </body>
+          </html>
+        `)
+      }
+
+      return res.send(`
+        <!DOCTYPE html>
+        <html>
+          <head><title>Google Drive Setup</title><meta charset="utf-8"></head>
+          <body style="font-family: system-ui, sans-serif; padding: 40px; background: #0f172a; color: #f8fafc; max-width: 650px; margin: 40px auto; border-radius: 12px; border: 1px solid #334155;">
+            <h2 style="color: #10b981; margin-top: 0;">✅ Google Drive Refresh Token Berhasil Dibuat!</h2>
+            <p>Silakan salin baris di bawah ini dan tempelkan ke file <code>.env</code> kamu:</p>
+            <textarea style="width: 100%; height: 90px; font-size: 14px; font-family: monospace; padding: 12px; background: #1e293b; color: #38bdf8; border: 1px solid #334155; border-radius: 8px; box-sizing: border-box;" readonly>GOOGLE_DRIVE_REFRESH_TOKEN=${tokens.refresh_token}</textarea>
+            <p style="color: #94a3b8; font-size: 14px; margin-top: 16px;">
+              Akun <b>itsxcintersummit@gmail.com</b> sekarang aktif untuk storage, kuota 15 GB siap digunakan, dan error kuota 0 MB Service Account tidak akan muncul lagi!
+            </p>
+          </body>
+        </html>
+      `)
     }
 
     const googleUser = await getGoogleUserFromCode(code)
