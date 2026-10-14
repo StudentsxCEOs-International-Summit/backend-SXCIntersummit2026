@@ -45,6 +45,7 @@ const envSchema = z
     GOOGLE_DRIVE_FOLDER_PRELIMINARY_ID: z.string().optional(),
     GOOGLE_DRIVE_FOLDER_PAYMENT_ID: z.string().optional(),
     GOOGLE_DRIVE_FOLDER_SEMIFINAL_SLIDES_ID: z.string().optional(),
+    CRON_SECRET: z.string().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production" && !value.CORS_ORIGIN) {
