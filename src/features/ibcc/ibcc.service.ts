@@ -761,14 +761,32 @@ export async function publishResults(qualifiedTeamIds: number[]) {
 export async function getAllTeamsForAdmin() {
   const teams = await prisma.team.findMany({
     include: {
-      leader: { select: { id: true, name: true, email: true, institution: true, whatsapp: true } },
+      leader: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          wa_number: true,
+          institution_name: true,
+          major: true,
+        },
+      },
       TeamMember: {
         include: {
-          user: { select: { id: true, name: true, email: true, institution: true, whatsapp: true } },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              wa_number: true,
+              institution_name: true,
+              major: true,
+            },
+          },
         },
       },
       statuscode: true,
-      Submission: {
+      submissionTeam: {
         include: {
           Files: true,
         },
