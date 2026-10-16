@@ -1,4 +1,5 @@
 import rateLimit from 'express-rate-limit'
+import { env } from '../configs/env'
 
 // Defaults need tuning per-endpoint before production
 export const apiRateLimiter = rateLimit({
@@ -7,6 +8,10 @@ export const apiRateLimiter = rateLimit({
   standardHeaders: true, // Return rate limit info in the RateLimit-* headers
   legacyHeaders: false, // Disable the X-RateLimit-* headers
   validate: { trustProxy: false },
+  skip: (req) => {
+    const secret = req.headers['x-cron-secret']
+    return Boolean(secret && env.CRON_SECRET && secret === env.CRON_SECRET)
+  },
   message: {
     success: false,
     message: 'Too many requests, please try again later.',

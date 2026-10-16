@@ -17,6 +17,10 @@ export interface AppConfigType {
   MAX_SLIDE_PAGES: number;
   /** Maximum file size for slide upload in MB */
   MAX_SLIDE_SIZE_MB: number;
+  /** Number of days before deadline to send reminder emails (default: 3) */
+  DEADLINE_REMINDER_DAYS: number;
+  /** Number of days after registration without payment to send reminder (default: 3) */
+  PAYMENT_REMINDER_DAYS: number;
 }
 
 function loadFromEnv(): AppConfigType {
@@ -29,6 +33,8 @@ function loadFromEnv(): AppConfigType {
       process.env.EXTENDED_REGISTRATION_ENABLED === "true",
     MAX_SLIDE_PAGES: Number(process.env.MAX_SLIDE_PAGES) || 5,
     MAX_SLIDE_SIZE_MB: Number(process.env.MAX_SLIDE_SIZE_MB) || 20,
+    DEADLINE_REMINDER_DAYS: Number(process.env.DEADLINE_REMINDER_DAYS) || 3,
+    PAYMENT_REMINDER_DAYS: Number(process.env.PAYMENT_REMINDER_DAYS) || 3,
   };
 }
 
@@ -44,6 +50,19 @@ export function reloadAppConfig(): AppConfigType {
   console.log("[APP CONFIG] Configuration reloaded:", _config);
   return _config;
 }
+
+/**
+ * Updates application configuration dynamically at runtime.
+ */
+export function updateAppConfig(updates: Partial<AppConfigType>): AppConfigType {
+  _config = {
+    ..._config,
+    ...updates,
+  };
+  console.log("[APP CONFIG] Configuration updated dynamically:", _config);
+  return _config;
+}
+
 
 /**
  * Returns the currently effective registration deadline.
