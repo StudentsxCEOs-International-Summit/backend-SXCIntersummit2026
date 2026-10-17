@@ -21,3 +21,23 @@ export function startTokenCleanupJob() {
     }
   })
 }
+
+/**
+ * One-off trigger function for external cron services (e.g. cronjob.org).
+ */
+export async function triggerTokenCleanup(): Promise<{ purgedCount: number }> {
+  const result = await prisma.blacklist.deleteMany({
+    where: {
+      expiresAt: {
+        lt: new Date(),
+      },
+    },
+  })
+
+  if (result.count > 0) {
+    console.log(`[CLEANUP JOB] Purged ${result.count} expired token(s) from blacklist.`)
+  }
+
+  return { purgedCount: result.count }
+}
+
