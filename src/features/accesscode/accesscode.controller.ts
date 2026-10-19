@@ -3,7 +3,7 @@ import crypto from "crypto";
 import prisma from "../../configs/db";
 import { ok, badRequest, internalError, notFound } from "../../utils/response";
 import { AuthRequest } from "../../middlewares/auth.middleware";
-import { notifyStatusChange } from "../status/status.service";
+import { notifyStatusChange } from "../ibcc/ibcc.status";
 
 /**
  * Generate a cryptographically random 8-character alphanumeric access code.

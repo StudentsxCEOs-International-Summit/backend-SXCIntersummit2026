@@ -23,6 +23,10 @@ REST API documentation for **SxC International Summit 2026** backend system.
       url: env.APP_URL || 'http://localhost:3000',
       description: 'Current Environment API Server',
     },
+    {
+      name: 'Admin - Competition',
+      description: 'Competition management, team dashboard, and preliminary round evaluation',
+    },
   ],
   tags: [
     {
@@ -38,28 +42,32 @@ REST API documentation for **SxC International Summit 2026** backend system.
       description: 'Participant login, staff/admin login, token revocation (logout), and active user profile',
     },
     {
-      name: 'Upload - File Submissions',
-      description: 'Upload payment proof (IBCC-06), requirement proof (twibbon/story), and semifinal slide deck (IBCC-09)',
+      name: 'IBCC - Team Registration & Management',
+      description: 'Team registration and team profile dashboard with competition stage status',
+    },
+    {
+      name: 'IBCC - Participant Submissions',
+      description: 'Participant file submissions for preliminary slide deck, semifinal slide deck, and registration payment proof',
+    },
+    {
+      name: 'IBCC - Semifinal Scoring & Results',
+      description: 'Semifinal scoring by judges, leaderboard, and result publishing with automated email notifications',
     },
     {
       name: 'Finance - Verification',
-      description: 'Admin verification of payment proofs (ADMIN-02) and requirement submissions',
+      description: 'Admin verification of participant payment proofs and registration requirement submissions',
     },
     {
       name: 'Access Code - IBCC',
-      description: 'Generate access codes for semifinal (IBCC-07) and semifinal login with Team ID + Access Code (IBCC-08)',
-    },
-    {
-      name: 'Semifinal - Scoring & Results',
-      description: 'Semifinal scoring by judges (ADMIN-03), leaderboard, and result publishing with email notifications (IBCC-10)',
+      description: 'Generate access codes for qualified semifinal teams and semifinal portal authentication',
     },
     {
       name: 'Config - Application',
       description: 'Application configuration, registration deadline info, and email scheduler trigger',
     },
     {
-      name: 'IBCC - Team Registration & Preliminary',
-      description: 'IBCC 2026 team registration (IBCC-01), member activation via magic link (IBCC-MEMBER-01), team profile dashboard (IBCC-01b), and preliminary slide deck submission (IBCC-03)',
+      name: 'Admin - Google Drive Storage',
+      description: 'Google Drive OAuth 2.0 authorization setup and callback handler for storage token generation',
     },
   ],
   components: {
@@ -243,39 +251,17 @@ REST API documentation for **SxC International Summit 2026** backend system.
           },
         },
       },
-      IbccClaimAccountInput: {
-        type: 'object',
-        required: ['token', 'password'],
-        properties: {
-          token: { type: 'string', example: '58f4a1324838b0debcad95932df212cf...' },
-          password: {
-            type: 'string',
-            minLength: 8,
-            example: 'PasswordBaru123!',
-            description: 'Must include uppercase, lowercase, and number.',
-          },
-        },
-      },
       IbccRegisterResponse: {
         type: 'object',
         properties: {
           teamId: { type: 'integer', example: 42 },
           teamName: { type: 'string', example: 'The Innovators' },
           teamCode: { type: 'string', example: 'MYR6JD' },
+          driveFolderId: { type: 'string', example: '1A2b3c4D5e6F7g8H9i0J' },
+          driveFolderUrl: { type: 'string', example: 'https://drive.google.com/drive/folders/1A2b3c4D5e6F7g8H9i0J' },
           status: { type: 'string', example: 'REGISTERED' },
           memberCount: { type: 'integer', example: 2 },
           waGroupLink: { type: 'string', example: 'https://chat.whatsapp.com/IBCC2026PreliminaryStageInvite' },
-        },
-      },
-      IbccVerifyTokenResponse: {
-        type: 'object',
-        properties: {
-          teamId: { type: 'integer', example: 42 },
-          teamName: { type: 'string', example: 'The Innovators' },
-          leaderName: { type: 'string', example: 'John Doe' },
-          memberName: { type: 'string', example: 'Jane Doe' },
-          memberEmail: { type: 'string', example: 'jane@ui.ac.id' },
-          isAlreadyRegisteredUser: { type: 'boolean', example: false },
         },
       },
       IbccMyTeamResponse: {
@@ -287,6 +273,15 @@ REST API documentation for **SxC International Summit 2026** backend system.
           status: { type: 'string', example: 'PRELIMINARY_SUBMITTED' },
           isLeader: { type: 'boolean', example: true },
           competitionStage: { type: 'string', example: 'PREELIM' },
+          payment: {
+            type: 'object',
+            properties: {
+              status: { type: 'string', example: 'PENDING_VERIFICATION' },
+              isUploaded: { type: 'boolean', example: true },
+              fileUrl: { type: 'string', nullable: true, example: 'https://drive.google.com/file/d/.../view' },
+              submittedAt: { type: 'string', format: 'date-time', nullable: true, example: '2026-10-15T10:00:00.000Z' },
+            },
+          },
           selectionResult: {
             type: 'object',
             properties: {
@@ -321,6 +316,8 @@ REST API documentation for **SxC International Summit 2026** backend system.
             type: 'object',
             properties: {
               requirementsCompleted: { type: 'boolean', example: true },
+              paymentSubmitted: { type: 'boolean', example: true },
+              paymentSubmittedAt: { type: 'string', format: 'date-time', nullable: true, example: '2026-10-15T10:00:00.000Z' },
               preliminaryOutputSubmitted: { type: 'boolean', example: true },
               preliminarySubmittedAt: { type: 'string', format: 'date-time', example: '2026-10-15T10:30:00.000Z' },
             },
@@ -333,7 +330,29 @@ REST API documentation for **SxC International Summit 2026** backend system.
           submissionId: { type: 'integer', example: 105 },
           stage: { type: 'string', example: 'PREELIM' },
           submittedAt: { type: 'string', format: 'date-time', example: '2026-10-15T14:20:00.000Z' },
-          fileUrl: { type: 'string', example: '/uploads/preliminary/1728512345-abc123.pdf' },
+          fileUrl: { type: 'string', example: 'https://drive.google.com/file/d/1xYz.../view' },
+          gdriveId: { type: 'string', example: '1xYz...' },
+        },
+      },
+      IbccPaymentSubmissionResponse: {
+        type: 'object',
+        properties: {
+          submissionId: { type: 'integer', example: 16 },
+          stage: { type: 'string', example: 'REGISTRATION' },
+          type: { type: 'string', example: 'PAYMENT' },
+          submittedAt: { type: 'string', format: 'date-time', example: '2026-10-13T01:45:00.000Z' },
+          fileUrl: { type: 'string', example: 'https://drive.google.com/file/d/1JiO42ObUK8ft6yjCFncKHr3YFBpTW6XJ/view?usp=drivesdk' },
+          gdriveId: { type: 'string', example: '1JiO42ObUK8ft6yjCFncKHr3YFBpTW6XJ' },
+        },
+      },
+      IbccSemifinalSubmissionResponse: {
+        type: 'object',
+        properties: {
+          submissionId: { type: 'integer', example: 15 },
+          stage: { type: 'string', example: 'SEMIFINAL' },
+          submittedAt: { type: 'string', format: 'date-time', example: '2026-10-13T01:42:59.946Z' },
+          fileUrl: { type: 'string', example: 'https://drive.google.com/file/d/1WYQWf2820zy5aqk8vWXkTq8zbm2AtP5L/view?usp=drivesdk' },
+          gdriveId: { type: 'string', example: '1WYQWf2820zy5aqk8vWXkTq8zbm2AtP5L' },
         },
       },
     },
@@ -1155,6 +1174,93 @@ REST API documentation for **SxC International Summit 2026** backend system.
                           },
                         },
                       },
+    '/api/auth/google': {
+      get: {
+        tags: ['Auth - Google OAuth'],
+        summary: 'Initiate Google OAuth Flow',
+        description: 'Redirects the user to Google OAuth consent page, or returns the authorization URL if requested with `?json=true` or `Accept: application/json`.',
+        parameters: [
+          {
+            name: 'state',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Optional state string or client redirect URI to preserve across OAuth handshake',
+          },
+          {
+            name: 'json',
+            in: 'query',
+            required: false,
+            schema: { type: 'boolean' },
+            description: 'Set to true to receive the Google consent URL as a JSON response instead of a 302 redirect',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Google OAuth authorization URL successfully generated.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Google OAuth authorization URL generated.' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        url: { type: 'string', example: 'https://accounts.google.com/o/oauth2/v2/auth?...' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          302: {
+            description: 'Direct redirect to Google OAuth login screen.',
+          },
+        },
+      },
+    },
+    '/api/auth/google/callback': {
+      get: {
+        tags: ['Auth - Google OAuth'],
+        summary: 'Google OAuth Callback Handler',
+        description: 'Endpoint invoked by Google redirect with authorization code. Exchanges code for user info, activates user session, and issues session cookie.',
+        parameters: [
+          {
+            name: 'code',
+            in: 'query',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Authorization code provided by Google OAuth',
+          },
+          {
+            name: 'state',
+            in: 'query',
+            required: false,
+            schema: { type: 'string' },
+            description: 'Optional redirect URL or state',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Authentication successful. User session established.',
+          },
+          302: {
+            description: 'Redirect to state URL if an HTTP redirect URL was provided.',
+          },
+          401: {
+            description: 'Google code exchange failed or unauthorized.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ApiErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
                     },
                   },
                 },
@@ -1194,100 +1300,11 @@ REST API documentation for **SxC International Summit 2026** backend system.
           },
         },
       },
-    },    // UPLOAD — File Submissions    '/api/upload/payment': {
-      post: {
-        tags: ['Upload - File Submissions'],
-        summary: 'Upload payment proof (IBCC-06)',
-        description: 'Uploads a payment proof image for a team. Accepted formats: JPG, PNG, WebP, GIF (max 5 MB).',
-        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
-        requestBody: {
-          required: true,
-          content: {
-            'multipart/form-data': {
-              schema: {
-                type: 'object',
-                required: ['file', 'teamId'],
-                properties: {
-                  file: { type: 'string', format: 'binary', description: 'Payment proof image file' },
-                  teamId: { type: 'integer', example: 1, description: 'Team ID' },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          201: {
-            description: 'Payment proof uploaded successfully.',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } },
-          },
-          400: { description: 'Missing file or invalid teamId.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-          404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-        },
-      },
     },
-    '/api/upload/requirement': {
-      post: {
-        tags: ['Upload - File Submissions'],
-        summary: 'Upload requirement proof (twibbon / story)',
-        description: 'Uploads a twibbon or IG story screenshot as requirement proof. Accepted formats: JPG, PNG, WebP, GIF (max 5 MB).',
-        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
-        requestBody: {
-          required: true,
-          content: {
-            'multipart/form-data': {
-              schema: {
-                type: 'object',
-                required: ['file', 'teamId', 'type'],
-                properties: {
-                  file: { type: 'string', format: 'binary', description: 'Requirement proof image file' },
-                  teamId: { type: 'integer', example: 1 },
-                  type: { type: 'string', enum: ['twibbon', 'story'], example: 'twibbon' },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          201: { description: 'Requirement proof uploaded successfully.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
-          400: { description: 'Missing file, invalid teamId, or invalid type.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-          404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-        },
-      },
-    },
-    '/api/upload/slides': {
-      post: {
-        tags: ['Upload - File Submissions'],
-        summary: 'Upload 5-slide deck (IBCC-09)',
-        description: 'Uploads a semifinal presentation deck. Accepted formats: PDF, PPT, PPTX, images (max 20 MB, max 5 slides).',
-        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
-        requestBody: {
-          required: true,
-          content: {
-            'multipart/form-data': {
-              schema: {
-                type: 'object',
-                required: ['file', 'teamId'],
-                properties: {
-                  file: { type: 'string', format: 'binary', description: 'Slide deck file (PDF or PPTX)' },
-                  teamId: { type: 'integer', example: 1 },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          201: { description: 'Slide deck uploaded successfully.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
-          400: { description: 'Missing file or invalid teamId.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-          404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-        },
-      },
-    },    // FINANCE — Verification    '/api/finance/verify': {
+    '/api/finance/verify': {
       post: {
         tags: ['Finance - Verification'],
-        summary: 'Verify payment proof (ADMIN-02)',
+        summary: 'Verify payment proof',
         description: 'Admin approves or rejects a team\'s payment proof. Triggers status change email notification.',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         requestBody: {
@@ -1346,10 +1363,12 @@ REST API documentation for **SxC International Summit 2026** backend system.
           404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
         },
       },
-    },    // ACCESS CODE — IBCC    '/api/access-code/generate': {
+    },
+    // ACCESS CODE — IBCC
+    '/api/access-code/generate': {
       post: {
         tags: ['Access Code - IBCC'],
-        summary: 'Generate access code for semifinal (IBCC-07)',
+        summary: 'Generate access code for semifinal',
         description: 'Admin generates an 8-character alphanumeric access code for a team to use in semifinal login. Previous codes for the team are expired.',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         requestBody: {
@@ -1399,7 +1418,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
     '/api/access-code/login': {
       post: {
         tags: ['Access Code - IBCC'],
-        summary: 'Semifinal login with Team ID + Access Code (IBCC-08)',
+        summary: 'Semifinal login with Team ID and Access Code',
         description: 'Authenticates a team for the semifinal stage using their team ID and the access code generated by an admin.',
         requestBody: {
           required: true,
@@ -1467,145 +1486,8 @@ REST API documentation for **SxC International Summit 2026** backend system.
           404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
         },
       },
-    },    // SEMIFINAL — Scoring & Results    '/api/semifinal/score': {
-      post: {
-        tags: ['Semifinal - Scoring & Results'],
-        summary: 'Submit or update a semifinal score (ADMIN-03)',
-        description: 'A judge submits a score (0–100) for a team. If the judge already scored this team, the score is updated.',
-        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                required: ['teamId', 'score'],
-                properties: {
-                  teamId: { type: 'integer', example: 1 },
-                  score: { type: 'number', minimum: 0, maximum: 100, example: 85.5 },
-                  comment: { type: 'string', maxLength: 500, example: 'Strong presentation and clear arguments.' },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          201: { description: 'Score submitted successfully.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
-          200: { description: 'Score updated successfully (already scored before).', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
-          400: { description: 'Validation error.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiValidationErrorResponse' } } } },
-          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-          403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-          404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-        },
-      },
     },
-    '/api/semifinal/scores': {
-      get: {
-        tags: ['Semifinal - Scoring & Results'],
-        summary: 'Get semifinal leaderboard',
-        description: 'Returns all semifinal scores grouped by team with average scores, sorted descending.',
-        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
-        responses: {
-          200: {
-            description: 'Scores retrieved successfully.',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    success: { type: 'boolean', example: true },
-                    message: { type: 'string', example: 'Semifinal scores retrieved.' },
-                    data: {
-                      type: 'object',
-                      properties: {
-                        rankings: {
-                          type: 'array',
-                          items: {
-                            type: 'object',
-                            properties: {
-                              teamId: { type: 'integer', example: 1 },
-                              teamName: { type: 'string', example: 'Team Alpha' },
-                              average: { type: 'number', example: 87.5 },
-                              scores: {
-                                type: 'array',
-                                items: {
-                                  type: 'object',
-                                  properties: {
-                                    judgeId: { type: 'integer', example: 1 },
-                                    judgeName: { type: 'string', example: 'Judge A' },
-                                    score: { type: 'number', example: 85 },
-                                    comment: { type: 'string', nullable: true },
-                                  },
-                                },
-                              },
-                            },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-          403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-        },
-      },
-    },
-    '/api/semifinal/publish-results': {
-      post: {
-        tags: ['Semifinal - Scoring & Results'],
-        summary: 'Publish semifinal results & send emails (IBCC-10)',
-        description: 'Publishes the semifinal results by marking qualified teams (Top 5) and eliminated teams. Sends congratulatory/elimination emails to all team leaders.',
-        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                required: ['qualifiedTeamIds'],
-                properties: {
-                  qualifiedTeamIds: {
-                    type: 'array',
-                    items: { type: 'integer' },
-                    example: [1, 3, 5, 7, 9],
-                    description: 'Array of team IDs that qualified to the Final round',
-                  },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          200: {
-            description: 'Results published and emails queued.',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    success: { type: 'boolean', example: true },
-                    message: { type: 'string', example: 'Results published. 5 teams qualified, 10 teams eliminated. Emails are being sent.' },
-                    data: {
-                      type: 'object',
-                      properties: {
-                        qualified: { type: 'array', items: { type: 'integer' }, example: [1, 3, 5, 7, 9] },
-                        eliminated: { type: 'array', items: { type: 'integer' }, example: [2, 4, 6, 8, 10] },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          400: { description: 'Validation error.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiValidationErrorResponse' } } } },
-          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-          403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
-        },
-      },
-    },    // CONFIG — Application    '/api/config': {
+    '/api/config': {
       get: {
         tags: ['Config - Application'],
         summary: 'Get application configuration',
@@ -1662,9 +1544,9 @@ REST API documentation for **SxC International Summit 2026** backend system.
       },
     },
     '/api/ibcc/register': {
-      post: {
-        tags: ['IBCC - Team Registration & Preliminary'],
-        summary: 'Register team for IBCC 2026 (IBCC-01)',
+        post: {
+          tags: ['IBCC - Team Registration & Management'],
+        summary: 'Register team for IBCC 2026',
         description: 'Team leader registers their team (1-3 members) with identity details and 5 verification files. Allocates a Master Team Code atomically, creates invitations with magic links for members, and queues confirmation emails.',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         requestBody: {
@@ -1752,9 +1634,9 @@ REST API documentation for **SxC International Summit 2026** backend system.
       },
     },
     '/api/ibcc/my-team': {
-      get: {
-        tags: ['IBCC - Team Registration & Preliminary'],
-        summary: 'Get team profile and competition stage status (IBCC-01b)',
+        get: {
+          tags: ['IBCC - Team Registration & Management'],
+        summary: 'Get team profile and competition stage status',
         description: 'Returns team details, member list, preliminary submission state, and qualification results for the logged-in user (leader or member). Single-query optimized.',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         responses: {
@@ -1784,106 +1666,11 @@ REST API documentation for **SxC International Summit 2026** backend system.
         },
       },
     },
-    '/api/ibcc/members/verify-token': {
-      get: {
-        tags: ['IBCC - Team Registration & Preliminary'],
-        summary: 'Verify member invitation token (IBCC-MEMBER-01)',
-        description: 'Validates magic link invitation token when an invited member opens the link in their browser. Public endpoint.',
-        parameters: [
-          {
-            name: 'token',
-            in: 'query',
-            required: true,
-            schema: { type: 'string' },
-            description: 'Cryptographic activation token from invitation email',
-            example: '58f4a1324838b0debcad95932df212cf6924b1049adca383796ff0f81d116c47',
-          },
-        ],
-        responses: {
-          200: {
-            description: 'Token is valid.',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    success: { type: 'boolean', example: true },
-                    message: { type: 'string', example: 'Token is valid.' },
-                    data: { $ref: '#/components/schemas/IbccVerifyTokenResponse' },
-                  },
-                },
-              },
-            },
-          },
-          400: {
-            description: 'Invalid, claimed, or expired token.',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
-          },
-        },
-      },
-    },
-    '/api/ibcc/members/claim-account': {
-      post: {
-        tags: ['IBCC - Team Registration & Preliminary'],
-        summary: 'Activate member account and create password (IBCC-MEMBER-01)',
-        description: 'Sets a password for an invited member, activates their account, marks the invitation as claimed, and issues a session JWT.',
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: { $ref: '#/components/schemas/IbccClaimAccountInput' },
-            },
-          },
-        },
-        responses: {
-          200: {
-            description: 'Account activated successfully.',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    success: { type: 'boolean', example: true },
-                    message: { type: 'string', example: 'Account successfully activated! Welcome to the team.' },
-                    data: {
-                      type: 'object',
-                      properties: {
-                        accessToken: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsIn...' },
-                        user: {
-                          type: 'object',
-                          properties: {
-                            id: { type: 'integer', example: 15 },
-                            name: { type: 'string', example: 'Jane Doe' },
-                            email: { type: 'string', example: 'jane@ui.ac.id' },
-                          },
-                        },
-                        team: {
-                          type: 'object',
-                          properties: {
-                            id: { type: 'integer', example: 42 },
-                            name: { type: 'string', example: 'The Innovators' },
-                            code: { type: 'string', example: 'MYR6JD' },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          400: {
-            description: 'Validation failure or expired token.',
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
-          },
-        },
-      },
-    },
     '/api/ibcc/submission/preliminary': {
-      post: {
-        tags: ['IBCC - Team Registration & Preliminary'],
-        summary: 'Upload preliminary slide deck (IBCC-03)',
-        description: 'Team leader uploads their preliminary case submission slide deck (PDF or PPTX, maximum 15MB).',
+        post: {
+          tags: ['IBCC - Participant Submissions'],
+        summary: 'Upload preliminary slide deck',
+        description: 'Team leader uploads their preliminary case submission slide deck (PDF or PPTX, maximum 20MB). Team identity is automatically inferred from authenticated leader token.',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         requestBody: {
           required: true,
@@ -1891,10 +1678,10 @@ REST API documentation for **SxC International Summit 2026** backend system.
             'multipart/form-data': {
               schema: {
                 type: 'object',
-                required: ['slideDeck'],
+                required: ['file'],
                 properties: {
                   teamId: { type: 'integer', description: 'Optional team ID if inferred from leader', example: 42 },
-                  slideDeck: { type: 'string', format: 'binary', description: 'Preliminary slide deck file (PDF or PPTX, max 15MB)' },
+                  file: { type: 'string', format: 'binary', description: 'Preliminary slide deck file (PDF or PPTX, max 20MB)' },
                 },
               },
             },
@@ -1926,6 +1713,328 @@ REST API documentation for **SxC International Summit 2026** backend system.
           },
           403: {
             description: 'Forbidden: user is not the leader of an active IBCC team.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/api/ibcc/submission/semifinal': {
+      post: {
+        tags: ['IBCC - Participant Submissions'],
+        summary: 'Upload semifinal 5-slide deck to Google Drive',
+        description: 'Upload 5-slide presentation deck (PDF or PPTX, max 20MB) to Google Drive Semifinal Slides folder. Returns clean, flat response with submittedAt timestamp.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['file'],
+                properties: {
+                  file: { type: 'string', format: 'binary', description: 'Slide deck file (PDF or PPTX, max 20MB)' },
+                  teamId: { type: 'integer', example: 42, description: 'Optional team ID. Inferred from authenticated token if omitted.' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Semifinal slide deck submitted successfully.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Semifinal slide deck submitted successfully.' },
+                    data: { $ref: '#/components/schemas/IbccSemifinalSubmissionResponse' },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Missing file or invalid teamId.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden: user is not the leader of an active IBCC team.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/ibcc/submission/payment': {
+      post: {
+        tags: ['IBCC - Participant Submissions'],
+        summary: 'Upload semifinal payment proof to Google Drive',
+        description: 'Upload payment receipt image/PDF for semifinalist team. Streams directly to Google Drive Payment subfolder and creates a Submission record.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                required: ['file'],
+                properties: {
+                  file: { type: 'string', format: 'binary', description: 'Payment proof image or PDF file (max 5MB)' },
+                  teamId: { type: 'integer', example: 42, description: 'Optional team ID. Inferred from authenticated token if omitted.' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Payment proof uploaded successfully to Google Drive.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Payment proof uploaded successfully to Google Drive.' },
+                    data: { $ref: '#/components/schemas/IbccPaymentSubmissionResponse' },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Missing file or invalid teamId.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden: user is not the leader of an active IBCC team.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/ibcc/semifinal/score': {
+      post: {
+        tags: ['IBCC - Semifinal Scoring & Results'],
+        summary: 'Submit or update a semifinal score',
+        description: 'A judge submits a score (0–100) for a team. If the judge already scored this team, the score is updated.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['teamId', 'score'],
+                properties: {
+                  teamId: { type: 'integer', example: 42 },
+                  score: { type: 'number', minimum: 0, maximum: 100, example: 85.5 },
+                  comment: { type: 'string', maxLength: 500, example: 'Strong presentation and clear arguments.' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: 'Score submitted successfully.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+          200: { description: 'Score updated successfully (already scored before).', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+          400: { description: 'Validation error.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiValidationErrorResponse' } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          404: { description: 'Team not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/ibcc/semifinal/scores': {
+      get: {
+        tags: ['IBCC - Semifinal Scoring & Results'],
+        summary: 'Get semifinal leaderboard',
+        description: 'Returns all semifinal scores grouped by team with average scores, sorted descending.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        responses: {
+          200: {
+            description: 'Scores retrieved successfully.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Semifinal scores retrieved.' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        rankings: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              teamId: { type: 'integer', example: 42 },
+                              teamName: { type: 'string', example: 'Team Alpha' },
+                              average: { type: 'number', example: 87.5 },
+                              scores: {
+                                type: 'array',
+                                items: {
+                                  type: 'object',
+                                  properties: {
+                                    judgeId: { type: 'integer', example: 1 },
+                                    judgeName: { type: 'string', example: 'Judge A' },
+                                    score: { type: 'number', example: 85 },
+                                    comment: { type: 'string', nullable: true },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/ibcc/semifinal/publish-results': {
+      post: {
+        tags: ['IBCC - Semifinal Scoring & Results'],
+        summary: 'Publish semifinal results & blast notification emails',
+        description: 'Publishes semifinal results by marking qualified teams (Top 5) and eliminated teams, then triggers asynchronous email notifications.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['qualifiedTeamIds'],
+                properties: {
+                  qualifiedTeamIds: {
+                    type: 'array',
+                    items: { type: 'integer' },
+                    example: [1, 3, 5, 7, 9],
+                    description: 'Array of team IDs that qualified to the Final round',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Results published successfully. Emails are being sent.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } },
+          },
+          400: { description: 'Validation error.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiValidationErrorResponse' } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/admin/drive/setup': {
+      get: {
+        tags: ['Admin - Google Drive Storage'],
+        summary: 'Initiate Google Drive OAuth 2.0 flow',
+        description: 'Redirects administrator to Google OAuth 2.0 consent screen with offline access and prompt=consent to generate a new refresh token for Google Drive integration.',
+        responses: {
+          302: {
+            description: 'Redirect to Google OAuth 2.0 authorization URL.',
+          },
+        },
+      },
+    },
+    '/api/admin/drive/callback': {
+      get: {
+        tags: ['Admin - Google Drive Storage'],
+        summary: 'Google Drive OAuth 2.0 callback',
+        description: 'Receives the OAuth authorization code, exchanges it for access and refresh tokens, and displays instructions to configure GOOGLE_DRIVE_REFRESH_TOKEN in .env.',
+        parameters: [
+          {
+            name: 'code',
+            in: 'query',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Authorization code returned from Google OAuth',
+          },
+        ],
+        responses: {
+          200: {
+            description: 'OAuth authorization successful. Refresh token displayed.',
+          },
+          400: {
+            description: 'Missing authorization code or OAuth exchange failed.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/api/ibcc/admin/teams': {
+      get: {
+        tags: ['IBCC - Team Registration & Management'],
+        summary: 'Get all registered teams dashboard',
+        description: 'Admin retrieves all IBCC teams with leader, member details, submissions, and statuses.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        responses: {
+          200: {
+            description: 'Teams retrieved successfully.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } },
+          },
+          401: {
+            description: 'Unauthorized.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+          403: {
+            description: 'Forbidden - Admin access required.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/api/ibcc/admin/preliminary/{teamId}': {
+      put: {
+        tags: ['IBCC - Team Registration & Management'],
+        summary: 'Update team preliminary evaluation status',
+        description: 'Admin evaluates a team in the preliminary round (passed/failed), updates the team score, logs activity, and sends automated email notification to the team leader.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        parameters: [
+          {
+            name: 'teamId',
+            in: 'path',
+            required: true,
+            schema: { type: 'integer' },
+            description: 'The ID of the team to evaluate',
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['status'],
+                properties: {
+                  status: { type: 'string', enum: ['passed', 'failed'], example: 'passed' },
+                  score: { type: 'number', example: 88.5, description: 'Optional preliminary score' },
+                  feedback: { type: 'string', example: 'Great paper structure and insight.', description: 'Feedback sent in email if failed' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Preliminary status updated successfully.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } },
+          },
+          400: {
+            description: 'Validation error.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiValidationErrorResponse' } } },
+          },
+          401: {
+            description: 'Unauthorized.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+          403: {
+            description: 'Forbidden - Admin access required.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+          404: {
+            description: 'Team not found.',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
           },
         },
