@@ -34,14 +34,18 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma client
+        shell: bash
         run: |
           set -Eeuo pipefail
 
           if [ -f prisma/schema.prisma ]; then
             npx prisma generate
+          else
+            echo "Prisma schema is not available. Skipping."
           fi
 
       - name: Run lint when available
+        shell: bash
         run: |
           set -Eeuo pipefail
 
@@ -63,7 +67,8 @@ jobs:
             exit 0
           fi
 
-          if printf '%s' "$TEST_SCRIPT" | grep -qiE 'no test specified|no tests? configured'; then
+          if printf '%s' "$TEST_SCRIPT" |
+            grep -qiE 'no test specified|no tests? configured'; then
             echo "Placeholder test script detected. Skipping tests."
             exit 0
           fi
@@ -75,20 +80,26 @@ jobs:
         run: npm run build
 
       - name: Create deployment artifact
+        shell: bash
         run: |
           set -Eeuo pipefail
+
+          ARTIFACT_PATH="${RUNNER_TEMP}/backend-release.tar.gz"
 
           tar \
             --exclude=.git \
             --exclude=.github \
             --exclude=.env \
             --exclude='.env.*' \
-            --exclude=backend-release.tar.gz \
-            -czf backend-release.tar.gz \
+            --exclude='backend-release.tar.gz' \
+            -czf "$ARTIFACT_PATH" \
             .
 
-          test -s backend-release.tar.gz
-          ls -lh backend-release.tar.gz
+          test -s "$ARTIFACT_PATH"
+          tar -tzf "$ARTIFACT_PATH" >/dev/null
+
+          echo "Artifact created successfully:"
+          ls -lh "$ARTIFACT_PATH"
 
       - name: Configure SSH
         env:
@@ -115,6 +126,9 @@ jobs:
 
           RELEASE_ID="${GITHUB_SHA}-${GITHUB_RUN_ID}"
           RELEASE_DIR="/var/www/sxc/backend/releases/${RELEASE_ID}"
+          ARTIFACT_PATH="${RUNNER_TEMP}/backend-release.tar.gz"
+
+          test -s "$ARTIFACT_PATH"
 
           ssh \
             -p "$VPS_PORT" \
@@ -123,7 +137,7 @@ jobs:
 
           scp \
             -P "$VPS_PORT" \
-            backend-release.tar.gz \
+            "$ARTIFACT_PATH" \
             "$VPS_USER@$VPS_HOST:$RELEASE_DIR/backend-release.tar.gz"
 
       - name: Prepare and activate backend release
@@ -150,8 +164,10 @@ jobs:
           PREVIOUS=""
 
           test -d "$RELEASE_DIR"
-          test -f "$RELEASE_DIR/backend-release.tar.gz"
+          test -s "$RELEASE_DIR/backend-release.tar.gz"
           test -s "$SHARED_ENV"
+
+          tar -tzf "$RELEASE_DIR/backend-release.tar.gz" >/dev/null
 
           tar \
             -xzf "$RELEASE_DIR/backend-release.tar.gz" \
@@ -172,29 +188,39 @@ jobs:
             PREVIOUS="$(readlink -f "$CURRENT")"
           fi
 
+          rollback() {
+            if [ -z "$PREVIOUS" ] || [ ! -d "$PREVIOUS" ]; then
+              echo "No previous backend release is available."
+              return 1
+            fi
+
+            echo "Rolling back to: $PREVIOUS"
+
+            ln -sfn "$PREVIOUS" "${CURRENT}.rollback"
+            mv -Tf "${CURRENT}.rollback" "$CURRENT"
+
+            sudo systemctl restart "$SERVICE"
+          }
+
           ln -sfn "$RELEASE_DIR" "${CURRENT}.new"
           mv -Tf "${CURRENT}.new" "$CURRENT"
 
-          rollback() {
-            if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ]; then
-              echo "Rolling back to $PREVIOUS"
-
-              ln -sfn "$PREVIOUS" "${CURRENT}.rollback"
-              mv -Tf "${CURRENT}.rollback" "$CURRENT"
-
-              sudo systemctl restart "$SERVICE"
-            fi
-          }
-
           if ! sudo systemctl restart "$SERVICE"; then
             echo "Failed to restart backend service."
-            rollback
+            rollback || true
             exit 1
           fi
 
+          sleep 3
+
           if ! sudo systemctl is-active --quiet "$SERVICE"; then
             echo "Backend service is not active."
-            rollback
+
+            sudo systemctl status "$SERVICE" \
+              --no-pager \
+              --lines=50 || true
+
+            rollback || true
             exit 1
           fi
 
@@ -202,10 +228,17 @@ jobs:
             -fsS \
             --retry 5 \
             --retry-delay 3 \
+            --retry-connrefused \
             http://127.0.0.1:3000/api/health \
-            > /dev/null; then
+            >/dev/null; then
+
             echo "Local backend health check failed."
-            rollback
+
+            sudo systemctl status "$SERVICE" \
+              --no-pager \
+              --lines=50 || true
+
+            rollback || true
             exit 1
           fi
 
@@ -220,8 +253,9 @@ jobs:
             -fsS \
             --retry 5 \
             --retry-delay 3 \
+            --retry-connrefused \
             https://api.sayyid.biz.id/api/health \
-            > /dev/null
+            >/dev/null
 
       - name: Cleanup old backend releases
         if: success()
@@ -250,7 +284,8 @@ jobs:
             tail -n +6 |
             cut -d' ' -f2- |
             while IFS= read -r release; do
-              if [ -n "$release" ] && [ "$release" != "$CURRENT" ]; then
+              if [ -n "$release" ] &&
+                 [ "$release" != "$CURRENT" ]; then
                 echo "Removing old release: $release"
                 rm -rf -- "$release"
               fi
