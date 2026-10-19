@@ -1,0 +1,248 @@
+name: Deploy Backend Dev
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-production-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy backend
+    runs-on: ubuntu-latest
+    environment: production-dev
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: |
+          set -Eeuo pipefail
+
+          if [ -f prisma/schema.prisma ]; then
+            npx prisma generate
+          fi
+
+      - name: Run lint when available
+        run: |
+          set -Eeuo pipefail
+
+          if node -e "const p=require('./package.json'); process.exit(p.scripts?.lint ? 0 : 1)"; then
+            npm run lint
+          else
+            echo "Lint script is not available. Skipping."
+          fi
+
+      - name: Run tests when available
+        run: |
+          set -Eeuo pipefail
+
+          if node -e "const p=require('./package.json'); process.exit(p.scripts?.test ? 0 : 1)"; then
+            npm test -- --runInBand
+          else
+            echo "Test script is not available. Skipping."
+          fi
+
+      - name: Build backend
+        run: npm run build
+
+      - name: Create deployment artifact
+        run: |
+          set -Eeuo pipefail
+
+          tar \
+            --exclude=.git \
+            --exclude=.github \
+            --exclude=.env \
+            --exclude='.env.*' \
+            --exclude=backend-release.tar.gz \
+            -czf backend-release.tar.gz \
+            .
+
+          test -s backend-release.tar.gz
+          ls -lh backend-release.tar.gz
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+
+          install -d -m 700 ~/.ssh
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Upload backend artifact
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+
+          RELEASE_ID="${GITHUB_SHA}-${GITHUB_RUN_ID}"
+          RELEASE_DIR="/var/www/sxc/backend/releases/${RELEASE_ID}"
+
+          ssh \
+            -p "$VPS_PORT" \
+            "$VPS_USER@$VPS_HOST" \
+            "mkdir -p '$RELEASE_DIR'"
+
+          scp \
+            -P "$VPS_PORT" \
+            backend-release.tar.gz \
+            "$VPS_USER@$VPS_HOST:$RELEASE_DIR/backend-release.tar.gz"
+
+      - name: Prepare and activate backend release
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+
+          RELEASE_ID="${GITHUB_SHA}-${GITHUB_RUN_ID}"
+          RELEASE_DIR="/var/www/sxc/backend/releases/${RELEASE_ID}"
+
+          ssh \
+            -p "$VPS_PORT" \
+            "$VPS_USER@$VPS_HOST" \
+            "RELEASE_DIR='$RELEASE_DIR' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+
+          BASE="/var/www/sxc/backend"
+          CURRENT="$BASE/current"
+          SHARED_ENV="$BASE/shared/.env"
+          SERVICE="sxc-backend.service"
+          PREVIOUS=""
+
+          test -d "$RELEASE_DIR"
+          test -f "$RELEASE_DIR/backend-release.tar.gz"
+          test -s "$SHARED_ENV"
+
+          tar \
+            -xzf "$RELEASE_DIR/backend-release.tar.gz" \
+            -C "$RELEASE_DIR"
+
+          rm -f "$RELEASE_DIR/backend-release.tar.gz"
+
+          ln -sfn "$SHARED_ENV" "$RELEASE_DIR/.env"
+
+          if [ -f "$RELEASE_DIR/prisma/schema.prisma" ]; then
+            cd "$RELEASE_DIR"
+
+            npx prisma migrate status
+            npx prisma migrate deploy
+          fi
+
+          if [ -L "$CURRENT" ]; then
+            PREVIOUS="$(readlink -f "$CURRENT")"
+          fi
+
+          ln -sfn "$RELEASE_DIR" "${CURRENT}.new"
+          mv -Tf "${CURRENT}.new" "$CURRENT"
+
+          rollback() {
+            if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ]; then
+              echo "Rolling back to $PREVIOUS"
+
+              ln -sfn "$PREVIOUS" "${CURRENT}.rollback"
+              mv -Tf "${CURRENT}.rollback" "$CURRENT"
+
+              sudo systemctl restart "$SERVICE"
+            fi
+          }
+
+          if ! sudo systemctl restart "$SERVICE"; then
+            echo "Failed to restart backend service."
+            rollback
+            exit 1
+          fi
+
+          if ! sudo systemctl is-active --quiet "$SERVICE"; then
+            echo "Backend service is not active."
+            rollback
+            exit 1
+          fi
+
+          if ! curl \
+            -fsS \
+            --retry 5 \
+            --retry-delay 3 \
+            http://127.0.0.1:3000/api/health \
+            > /dev/null; then
+            echo "Local backend health check failed."
+            rollback
+            exit 1
+          fi
+
+          echo "Backend release activated successfully: $RELEASE_DIR"
+          REMOTE
+
+      - name: Public API smoke test
+        run: |
+          set -Eeuo pipefail
+
+          curl \
+            -fsS \
+            --retry 5 \
+            --retry-delay 3 \
+            https://api.sayyid.biz.id/api/health \
+            > /dev/null
+
+      - name: Cleanup old backend releases
+        if: success()
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -Eeuo pipefail
+
+          ssh \
+            -p "$VPS_PORT" \
+            "$VPS_USER@$VPS_HOST" \
+            "bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+
+          BASE="/var/www/sxc/backend"
+          CURRENT="$(readlink -f "$BASE/current")"
+
+          find "$BASE/releases" \
+            -mindepth 1 \
+            -maxdepth 1 \
+            -type d \
+            -printf '%T@ %p\n' |
+            sort -nr |
+            tail -n +6 |
+            cut -d' ' -f2- |
+            while IFS= read -r release; do
+              if [ -n "$release" ] && [ "$release" != "$CURRENT" ]; then
+                echo "Removing old release: $release"
+                rm -rf -- "$release"
+              fi
+            done
+          REMOTE
