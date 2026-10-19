@@ -51,15 +51,25 @@ jobs:
             echo "Lint script is not available. Skipping."
           fi
 
-      - name: Run tests when available
+      - name: Run tests when configured
+        shell: bash
         run: |
           set -Eeuo pipefail
 
-          if node -e "const p=require('./package.json'); process.exit(p.scripts?.test ? 0 : 1)"; then
-            npm test -- --runInBand
-          else
-            echo "Test script is not available. Skipping."
+          TEST_SCRIPT="$(node -p "require('./package.json').scripts?.test || ''")"
+
+          if [ -z "$TEST_SCRIPT" ]; then
+            echo "No test script configured. Skipping tests."
+            exit 0
           fi
+
+          if printf '%s' "$TEST_SCRIPT" | grep -qiE 'no test specified|no tests? configured'; then
+            echo "Placeholder test script detected. Skipping tests."
+            exit 0
+          fi
+
+          echo "Running configured backend tests..."
+          npm test
 
       - name: Build backend
         run: npm run build
