@@ -31,19 +31,21 @@ export function startEmailSchedulerJob() {
 /**
  * Send deadline reminder emails 3 days before the registration deadline.
  */
-async function sendDeadlineReminders() {
+async function sendDeadlineReminders(): Promise<number> {
+  const cfg = getAppConfig();
   const deadline = getEffectiveDeadline();
   const now = new Date();
   const daysUntilDeadline = Math.ceil(
     (deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
   );
 
-  if (daysUntilDeadline > 3 || daysUntilDeadline < 0) {
-    return; // Only send when 3 days or less remain
+  const reminderDays = cfg.DEADLINE_REMINDER_DAYS || 3;
+  if (daysUntilDeadline > reminderDays || daysUntilDeadline < 0) {
+    return 0; // Only send when within reminder window
   }
 
   if (!isRegistrationOpen()) {
-    return; // Registration already closed
+    return 0; // Registration already closed
   }
 
   // Find teams with pending registration status (status code starts with "REG" or default 15)
@@ -92,19 +94,21 @@ async function sendDeadlineReminders() {
   if (sent > 0) {
     console.log(`[EMAIL SCHEDULER] Sent ${sent} deadline reminder email(s).`);
   }
+  return sent;
 }
 
 /**
  * Send payment reminders to teams that have not uploaded payment proof.
  */
-async function sendPaymentReminders() {
-  // Find teams with default status (15) that have been registered for more than 3 days
-  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+async function sendPaymentReminders(): Promise<number> {
+  const cfg = getAppConfig();
+  const paymentDays = cfg.PAYMENT_REMINDER_DAYS || 3;
+  const cutoffDate = new Date(Date.now() - paymentDays * 24 * 60 * 60 * 1000);
 
   const teamsNeedingPayment = await prisma.team.findMany({
     where: {
       status: 15,
-      createdAt: { lt: threeDaysAgo },
+      createdAt: { lt: cutoffDate },
     },
     include: { leader: true },
   });
@@ -160,6 +164,7 @@ async function sendPaymentReminders() {
   if (sent > 0) {
     console.log(`[EMAIL SCHEDULER] Sent ${sent} payment reminder email(s).`);
   }
+  return sent;
 }
 
 /**
@@ -167,7 +172,8 @@ async function sendPaymentReminders() {
  * Useful for integration with cronjob.org webhooks.
  */
 export async function triggerEmailScheduler(): Promise<{ deadlineReminders: number; paymentReminders: number }> {
-  await sendDeadlineReminders();
-  await sendPaymentReminders();
-  return { deadlineReminders: 0, paymentReminders: 0 };
+  const deadlineReminders = await sendDeadlineReminders();
+  const paymentReminders = await sendPaymentReminders();
+  return { deadlineReminders, paymentReminders };
 }
+
