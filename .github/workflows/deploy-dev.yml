@@ -321,7 +321,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          PUBLIC_URL="https://api.sayyid.biz.id/"
+          PUBLIC_URL="https://api.sxcinternationalsummit.com/"
           SMOKE_TEST_PASSED=false
 
           for attempt in $(seq 1 15); do
