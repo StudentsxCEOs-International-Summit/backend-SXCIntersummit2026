@@ -12,12 +12,48 @@ export interface UploadGdriveResult {
   directDownloadLink: string;
 }
 
-let driveInstance: any = null;
+/** 1 is the main Drive account; 2 is the optional backup used when 1 is full or its token is dead. */
+export type DriveAccount = 1 | 2;
 
-export function getDriveClient() {
-  if (driveInstance) return driveInstance;
+const driveInstances: Partial<Record<DriveAccount, any>> = {};
 
-  if (env.GOOGLE_DRIVE_REFRESH_TOKEN) {
+const refreshTokenOf = (account: DriveAccount) =>
+  account === 1 ? env.GOOGLE_DRIVE_REFRESH_TOKEN : env.GOOGLE_DRIVE_REFRESH_TOKEN_2;
+
+/** Accounts that have a refresh token, main account first. */
+export function configuredDriveAccounts(): DriveAccount[] {
+  return ([1, 2] as DriveAccount[]).filter((account) => Boolean(refreshTokenOf(account)));
+}
+
+/** Folder IDs for one account (each account has its own Drive, so its own folders). */
+export function driveFolders(account: DriveAccount = 1) {
+  const pick = (main: string | undefined, second: string | undefined) =>
+    account === 1 ? main : second;
+
+  const base =
+    pick(env.GOOGLE_DRIVE_FOLDER_IBCC_ID, env.GOOGLE_DRIVE_FOLDER_IBCC_ID_2) ||
+    pick(env.GOOGLE_DRIVE_FOLDER_ID, env.GOOGLE_DRIVE_FOLDER_ID_2);
+
+  return {
+    base,
+    registration:
+      pick(env.GOOGLE_DRIVE_FOLDER_REGISTRATION_ID, env.GOOGLE_DRIVE_FOLDER_REGISTRATION_ID_2) || base,
+    payment: pick(env.GOOGLE_DRIVE_FOLDER_PAYMENT_ID, env.GOOGLE_DRIVE_FOLDER_PAYMENT_ID_2) || base,
+    preliminary:
+      pick(env.GOOGLE_DRIVE_FOLDER_PRELIMINARY_ID, env.GOOGLE_DRIVE_FOLDER_PRELIMINARY_ID_2) || base,
+    semifinal:
+      pick(env.GOOGLE_DRIVE_FOLDER_SEMIFINAL_SLIDES_ID, env.GOOGLE_DRIVE_FOLDER_SEMIFINAL_SLIDES_ID_2) ||
+      base,
+  };
+}
+
+export function getDriveClient(account: DriveAccount = 1) {
+  const existing = driveInstances[account];
+  if (existing) return existing;
+
+  const refreshToken = refreshTokenOf(account);
+  if (refreshToken) {
+    // Both accounts authorize through the same OAuth client; only the refresh token differs.
     const clientId = env.GOOGLE_DRIVE_CLIENT_ID || env.GOOGLE_CLIENT_ID;
     const clientSecret = env.GOOGLE_DRIVE_CLIENT_SECRET || env.GOOGLE_CLIENT_SECRET;
     const redirectUri =
@@ -29,15 +65,15 @@ export function getDriveClient() {
       clientSecret,
       redirectUri,
     );
-    oauth2Client.setCredentials({
-      refresh_token: env.GOOGLE_DRIVE_REFRESH_TOKEN,
-    });
-    driveInstance = google.drive({ version: "v3", auth: oauth2Client });
-    return driveInstance;
+    oauth2Client.setCredentials({ refresh_token: refreshToken });
+    driveInstances[account] = google.drive({ version: "v3", auth: oauth2Client });
+    return driveInstances[account];
   }
 
   throw new Error(
-    "Google Drive OAuth credentials are not configured. Please set GOOGLE_DRIVE_REFRESH_TOKEN via /api/admin/drive/setup.",
+    `Google Drive OAuth credentials are not configured for account ${account}. Please set ${
+      account === 1 ? "GOOGLE_DRIVE_REFRESH_TOKEN" : "GOOGLE_DRIVE_REFRESH_TOKEN_2"
+    } via /api/admin/drive/setup.`,
   );
 }
 
@@ -49,13 +85,14 @@ const folderIdCache = new Map<string, string>();
 export async function getOrCreateFolder(
   folderName: string,
   parentFolderId: string,
+  account: DriveAccount = 1,
 ): Promise<string> {
-  const cacheKey = `${parentFolderId}:${folderName}`;
+  const cacheKey = `${account}:${parentFolderId}:${folderName}`;
   if (folderIdCache.has(cacheKey)) {
     return folderIdCache.get(cacheKey)!;
   }
 
-  const drive = getDriveClient();
+  const drive = getDriveClient(account);
   const escapedName = folderName.replace(/'/g, "\\'");
   const query = `name = '${escapedName}' and '${parentFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
 
@@ -95,19 +132,16 @@ export async function getOrCreateTeamFolder(
   teamCode: string,
   teamName: string,
   parentFolderId?: string,
+  account: DriveAccount = 1,
 ): Promise<string> {
-  const parentId =
-    parentFolderId ||
-    env.GOOGLE_DRIVE_FOLDER_REGISTRATION_ID ||
-    env.GOOGLE_DRIVE_FOLDER_IBCC_ID ||
-    env.GOOGLE_DRIVE_FOLDER_ID;
+  const parentId = parentFolderId || driveFolders(account).registration;
 
   if (!parentId) {
-    throw new Error("Registration parent folder ID is not configured.");
+    throw new Error(`Registration parent folder ID is not configured for Drive account ${account}.`);
   }
 
   const folderName = `[${teamCode}] ${teamName}`;
-  return getOrCreateFolder(folderName, parentId);
+  return getOrCreateFolder(folderName, parentId, account);
 }
 
 /**
@@ -118,8 +152,9 @@ export async function uploadBufferToDrive(
   fileName: string,
   mimeType: string,
   folderId: string,
+  account: DriveAccount = 1,
 ): Promise<UploadGdriveResult> {
-  const drive = getDriveClient();
+  const drive = getDriveClient(account);
 
   // Remove prior file with identical name to prevent duplicate storage
   try {
