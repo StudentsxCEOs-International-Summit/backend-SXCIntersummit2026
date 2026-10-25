@@ -20,15 +20,24 @@ const envSchema = z
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
     SMTP_FROM: z.string().optional(),
-    EMAIL_LOGO_URL: z.url("EMAIL_LOGO_URL must be a valid URL"),
-    EMAIL_HEADER_BANNER_URL: z.url("EMAIL_HEADER_BANNER_URL must be a  valid URL"),
+    EMAIL_LOGO_URL: z
+      .url()
+      .default(
+        "https://lh3.googleusercontent.com/d/1OXwQyeaZm5IA3xApxh2DJcVmJ8XfcFzT",
+      ),
+    EMAIL_BANNER_URL: z
+      .url()
+      .default(
+        `${process.env.APP_URL || "http://localhost:3000"}/public/images/email-banner.png`
+      ),
+    EMAIL_HEADER_BANNER_URL: z.url().optional(),
     GOOGLE_CLIENT_ID: z.string().min(1, "GOOGLE_CLIENT_ID is required"),
     GOOGLE_CLIENT_SECRET: z.string().min(1, "GOOGLE_CLIENT_SECRET is required"),
     GOOGLE_REDIRECT_URI: z.url("GOOGLE_REDIRECT_URI must be a valid URL"),
-    GOOGLE_DRIVE_CLIENT_EMAIL: z.string().optional(),
-    GOOGLE_DRIVE_PRIVATE_KEY: z.string().optional(),
-    GOOGLE_CLIENT_EMAIL: z.string().optional(),
-    GOOGLE_PRIVATE_KEY: z.string().optional(),
+    GOOGLE_DRIVE_REFRESH_TOKEN: z.string().optional(),
+    GOOGLE_DRIVE_CLIENT_ID: z.string().optional(),
+    GOOGLE_DRIVE_CLIENT_SECRET: z.string().optional(),
+    GOOGLE_DRIVE_REDIRECT_URI: z.string().optional(),
     GOOGLE_DRIVE_FOLDER_UPLOADS_ROOT_ID: z.string().optional(),
     GOOGLE_DRIVE_FOLDER_IBCC_ID: z.string().optional(),
     GOOGLE_DRIVE_FOLDER_ID: z.string().optional(),
@@ -36,6 +45,7 @@ const envSchema = z
     GOOGLE_DRIVE_FOLDER_PRELIMINARY_ID: z.string().optional(),
     GOOGLE_DRIVE_FOLDER_PAYMENT_ID: z.string().optional(),
     GOOGLE_DRIVE_FOLDER_SEMIFINAL_SLIDES_ID: z.string().optional(),
+    CRON_SECRET: z.string().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production" && !value.CORS_ORIGIN) {

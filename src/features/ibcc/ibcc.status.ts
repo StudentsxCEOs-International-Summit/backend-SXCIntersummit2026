@@ -1,15 +1,7 @@
 import prisma from "../../configs/db";
 import { sendMail } from "../../services/mail.service";
-import { renderStatusChangeEmail } from "./status.templates";
+import { renderStatusChangeEmail } from "./ibcc.templates";
 
-/**
- * Notifies a team's leader via email when the team status changes.
- * Also logs the email in the EmailLog table.
- *
- * @param teamId  The team whose status changed
- * @param newStatus  The new status code string (e.g. "PAID", "REJECTED_PAYMENT")
- * @param context  A short description of what triggered the change
- */
 export async function notifyStatusChange(
   teamId: number,
   newStatus: string,
@@ -45,7 +37,6 @@ export async function notifyStatusChange(
       text: `Hi ${team.leader.name}, your team "${team.name}" status has been updated to: ${newStatus}.`,
     });
 
-    // Log email
     await prisma.emailLog.create({
       data: {
         toEmail: team.leader.email,
@@ -54,19 +45,11 @@ export async function notifyStatusChange(
         status: result.success ? "success" : "failed",
       },
     });
-
-    console.log(
-      `[STATUS] Email sent to ${team.leader.email} for status change: ${newStatus}`,
-    );
   } catch (error: any) {
     console.error("[STATUS] notifyStatusChange error:", error.message);
-    // Non-blocking – don't throw
   }
 }
 
-/**
- * Send semifinal result emails (Top 5 vs eliminated).
- */
 export async function sendSemifinalResultEmails(
   qualifiedTeamIds: number[],
   eliminatedTeamIds: number[],
@@ -85,7 +68,7 @@ export async function sendSemifinalResultEmails(
 
     const isQualified = qualifiedTeamIds.includes(team.id);
     const subject = isQualified
-      ? `[SXC Intersummit 2026] 🎉 Congratulations! ${team.name} advances to the Final!`
+      ? `[SXC Intersummit 2026] Congratulations! ${team.name} advances to the Final!`
       : `[SXC Intersummit 2026] Semifinal Results – ${team.name}`;
 
     const html = renderStatusChangeEmail({

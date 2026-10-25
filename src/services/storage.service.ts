@@ -17,23 +17,28 @@ let driveInstance: any = null;
 export function getDriveClient() {
   if (driveInstance) return driveInstance;
 
-  const clientEmail = env.GOOGLE_DRIVE_CLIENT_EMAIL || env.GOOGLE_CLIENT_EMAIL;
-  const privateKey = env.GOOGLE_DRIVE_PRIVATE_KEY || env.GOOGLE_PRIVATE_KEY;
+  if (env.GOOGLE_DRIVE_REFRESH_TOKEN) {
+    const clientId = env.GOOGLE_DRIVE_CLIENT_ID || env.GOOGLE_CLIENT_ID;
+    const clientSecret = env.GOOGLE_DRIVE_CLIENT_SECRET || env.GOOGLE_CLIENT_SECRET;
+    const redirectUri =
+      env.GOOGLE_DRIVE_REDIRECT_URI ||
+      `${env.APP_URL}/api/admin/drive/callback`;
 
-  if (!clientEmail || !privateKey) {
-    throw new Error(
-      "Google Drive credentials are not configured (require GOOGLE_DRIVE_CLIENT_EMAIL & GOOGLE_DRIVE_PRIVATE_KEY).",
+    const oauth2Client = new google.auth.OAuth2(
+      clientId,
+      clientSecret,
+      redirectUri,
     );
+    oauth2Client.setCredentials({
+      refresh_token: env.GOOGLE_DRIVE_REFRESH_TOKEN,
+    });
+    driveInstance = google.drive({ version: "v3", auth: oauth2Client });
+    return driveInstance;
   }
 
-  const auth = new google.auth.JWT({
-    email: clientEmail,
-    key: privateKey.replace(/\\n/g, "\n"),
-    scopes: ["https://www.googleapis.com/auth/drive"],
-  });
-
-  driveInstance = google.drive({ version: "v3", auth });
-  return driveInstance;
+  throw new Error(
+    "Google Drive OAuth credentials are not configured. Please set GOOGLE_DRIVE_REFRESH_TOKEN via /api/admin/drive/setup.",
+  );
 }
 
 const folderIdCache = new Map<string, string>();
@@ -58,6 +63,8 @@ export async function getOrCreateFolder(
     q: query,
     fields: "files(id, name)",
     spaces: "drive",
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
 
   if (response.data.files && response.data.files.length > 0) {
@@ -73,6 +80,7 @@ export async function getOrCreateFolder(
       parents: [parentFolderId],
     },
     fields: "id",
+    supportsAllDrives: true,
   });
 
   const createdId = created.data.id!;
@@ -112,6 +120,27 @@ export async function uploadBufferToDrive(
   folderId: string,
 ): Promise<UploadGdriveResult> {
   const drive = getDriveClient();
+
+  // Remove prior file with identical name to prevent duplicate storage
+  try {
+    const escapedName = fileName.replace(/'/g, "\\'");
+    const existing = await drive.files.list({
+      q: `name = '${escapedName}' and '${folderId}' in parents and trashed = false`,
+      fields: "files(id)",
+      spaces: "drive",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+    if (existing.data.files && existing.data.files.length > 0) {
+      for (const f of existing.data.files) {
+        if (f.id) {
+          await drive.files.delete({ fileId: f.id, supportsAllDrives: true }).catch(() => {});
+        }
+      }
+    }
+  } catch {
+  }
+
   const mediaStream = Readable.from(fileBuffer);
 
   const response = await drive.files.create({
@@ -124,6 +153,7 @@ export async function uploadBufferToDrive(
       body: mediaStream,
     },
     fields: "id, name, webViewLink, webContentLink",
+    supportsAllDrives: true,
   });
 
   const fileId = response.data.id!;
@@ -135,6 +165,7 @@ export async function uploadBufferToDrive(
         role: "reader",
         type: "anyone",
       },
+      supportsAllDrives: true,
     });
   } catch (err: any) {
     console.warn(`[GDRIVE] Warning setting reader permission for ${fileId}:`, err.message);
@@ -175,10 +206,6 @@ export async function uploadFileToDrive(file: Express.Multer.File): Promise<stri
 
   return result.webViewLink;
 }
-
-// ─────────────────────────────────────────────
-// MULTER IN-MEMORY CONFIGURATION (ZERO LOCAL DISK)
-// ─────────────────────────────────────────────
 
 const storage = multer.memoryStorage();
 export const memoryStorage = storage;
@@ -249,8 +276,8 @@ export const uploadRegistrationRequirements = multer({
 export const uploadPreliminarySlideDeck = multer({
   storage,
   fileFilter: docFilter,
-  limits: { fileSize: 15 * 1024 * 1024 },
-}).single("slideDeck");
+  limits: { fileSize: 20 * 1024 * 1024 },
+}).single("file");
 
 /** Backward-compatible helper for legacy code */
 export function fileToPublicUrl(file: Express.Multer.File): string {

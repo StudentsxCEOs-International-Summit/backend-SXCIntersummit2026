@@ -98,7 +98,7 @@ export function renderEmailTemplate({
   title,
   headerHeading,
   contentHtml,
-  bannerUrl = env.EMAIL_HEADER_BANNER_URL || DEFAULT_EMAIL_HEADER_BANNER,
+  bannerUrl = env.EMAIL_HEADER_BANNER_URL || env.EMAIL_BANNER_URL || DEFAULT_EMAIL_HEADER_BANNER,
   logoUrl = env.EMAIL_LOGO_URL || DEFAULT_EMAIL_LOGO,
   footerNote,
 }: EmailLayoutOptions): string {
