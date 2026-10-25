@@ -50,19 +50,29 @@ app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')))
 app.use('/public', express.static(path.resolve(process.cwd(), 'public')))
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions))
-app.get('/api-docs.json', (_req, res) => {
-  res.setHeader('Content-Type', 'application/json')
-  res.send(swaggerSpec)
-})
+if (env.NODE_ENV !== 'production') {
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions))
+  app.get('/api-docs.json', (_req, res) => {
+    res.setHeader('Content-Type', 'application/json')
+    res.send(swaggerSpec)
+  })
+}
 
 app.use('/api', apiRateLimiter)
 
 app.get('/', (_req, res) => {
-  res.json({
+  if (env.NODE_ENV === 'production') {
+    return res.redirect('https://sxcinternationalsummit.com')
+  }
+
+  return res.json({
     message: 'API SXC Intersummit 2026 is running',
     docs: `${env.APP_URL}/api-docs`,
   })
+})
+
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok' })
 })
 
 app.use('/api', routes)
@@ -77,7 +87,9 @@ if (env.NODE_ENV !== 'test') {
 
   app.listen(env.PORT, () => {
     console.log(`API running at ${env.APP_URL}`)
-    console.log(`Swagger Docs available at ${env.APP_URL}/api-docs`)
+    if (env.NODE_ENV !== 'production') {
+      console.log(`Swagger Docs available at ${env.APP_URL}/api-docs`)
+    }
     console.log(`NODE_ENV : ${env.NODE_ENV}`)
     console.log(`APP_ENV  : ${env.APP_ENV}`)
   })
