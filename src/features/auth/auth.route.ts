@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { validateRequest } from '../../middlewares/validation.middleware'
 import { requireAuth } from '../../middlewares/auth.middleware'
+import { authRateLimiter } from '../../middlewares/rate-limiter.middleware'
 import * as AuthController from './auth.controller'
 import {
   registerSchema,
@@ -13,6 +14,11 @@ import {
 } from './auth.schema'
 
 const authRouter = Router()
+
+authRouter.use(
+  ['/register', '/verify-otp', '/resend-otp', '/forgot-password', '/reset-password', '/login', '/admin/login'],
+  authRateLimiter,
+)
 
 authRouter.post(
   '/register',

@@ -3,6 +3,7 @@ import { AuthRequest } from '../../middlewares/auth.middleware';
 import { cleanupUploadFiles } from '../../middlewares/clean-up-files.middleware';
 import { ok, badRequest, conflict, notFound, forbidden, internalError } from '../../utils/response';
 import { deleteFile } from '../../services/storage.service';
+import { getEffectiveDeadline } from '../../configs/appConfig';
 import {
   registerTeam,
   getMyTeam,
@@ -38,6 +39,13 @@ export async function registerTeamHandler(req: AuthRequest, res: Response) {
       return badRequest(res, 'Leader identity not found in authentication token.');
     }
 
+    // Judged by when the request arrived, so a slow upload that started before the deadline counts.
+    const receivedAt: Date = res.locals.receivedAt ?? new Date();
+    if (receivedAt >= getEffectiveDeadline()) {
+      cleanupUploadFiles(new Error('Registration closed'), req, res, () => {});
+      return forbidden(res, 'Registration is closed.');
+    }
+
     const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
     const missingFields: string[] = [];
 
@@ -66,7 +74,7 @@ export async function registerTeamHandler(req: AuthRequest, res: Response) {
       },
       input,
       registrationFiles,
-      res.locals.receivedAt,
+      receivedAt,
     );
 
     return ok(res, data, 'Team successfully registered for IBCC 2026!', 201);

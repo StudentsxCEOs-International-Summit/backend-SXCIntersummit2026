@@ -17,7 +17,9 @@ import path from 'path'
 
 const app = express()
 
-app.set('trust proxy', true)
+// Number of reverse proxies in front of the app (nginx = 1, Cloudflare + nginx = 2); `true` would
+// let clients spoof their IP through X-Forwarded-For and dodge the rate limiter.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1))
 
 app.use(
   helmet({
