@@ -1,13 +1,9 @@
 import crypto from 'crypto';
-import path from 'path';
 import prisma from '../../configs/db';
-import { env } from '../../configs/env';
 import { hashPassword } from '../../utils/bcrypt';
 import { sendMail } from '../../services/mail.service';
-import {
-  getOrCreateTeamFolder,
-  uploadBufferToDrive,
-} from '../../services/storage.service';
+import { PENDING_PREFIX, pendingFilePath } from '../../services/storage.service';
+import { enqueueDriveUpload } from '../../jobs/drive-upload.job';
 import {
   renderTeamRegistrationConfirmationEmail,
   renderPreliminaryEvaluationEmail,
@@ -27,6 +23,7 @@ export async function registerTeam(
   leaderUser: { id: number; email: string; name: string },
   input: RegisterTeamInput,
   files: RegistrationUploadedFiles,
+  receivedAt: Date = new Date(),
 ) {
   const normalizedTeamName = input.teamName.trim();
   const normalizedLeaderEmail = leaderUser.email.toLowerCase().trim();
@@ -45,6 +42,12 @@ export async function registerTeam(
   });
   if (existingTeamName) {
     throw new Error('Team name is already taken. Please choose another name.');
+  }
+
+  // Hashed up front so the transaction below only holds its connection for database work.
+  const placeholderPasswords = new Map<string, string>();
+  for (const email of memberEmails) {
+    placeholderPasswords.set(email, await hashPassword(crypto.randomBytes(24).toString('hex')));
   }
 
   const result = await prisma.$transaction(async (tx) => {
@@ -150,14 +153,11 @@ export async function registerTeam(
       let targetUser = await tx.user.findUnique({ where: { email } });
 
       if (!targetUser) {
-        const placeholderPassword = await hashPassword(
-          crypto.randomBytes(24).toString('hex'),
-        );
         targetUser = await tx.user.create({
           data: {
             name: memberInput.fullName.trim(),
             email,
-            password: placeholderPassword,
+            password: placeholderPasswords.get(email)!,
             status: 1,
             role: 'USER',
             wa_number: memberInput.whatsapp,
@@ -177,54 +177,18 @@ export async function registerTeam(
       });
     }
 
-    const sanitizedTeamName = normalizedTeamName.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const sanitizedLeaderName = leaderUser.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const teamFolderId = await getOrCreateTeamFolder(selectedCodeRecord.code, normalizedTeamName);
-
-    const [ktmUpload, followUpload, twibbonUpload, posterUpload, broadcastUpload] =
-      await Promise.all([
-        uploadBufferToDrive(
-          files.ktm_file[0].buffer,
-          `KTM_${sanitizedLeaderName}${path.extname(files.ktm_file[0].originalname) || '.pdf'}`,
-          files.ktm_file[0].mimetype,
-          teamFolderId,
-        ),
-        uploadBufferToDrive(
-          files.follow_proof[0].buffer,
-          `Follow_Instagram_${sanitizedTeamName}${path.extname(files.follow_proof[0].originalname) || '.pdf'}`,
-          files.follow_proof[0].mimetype,
-          teamFolderId,
-        ),
-        uploadBufferToDrive(
-          files.twibbon_proof[0].buffer,
-          `Twibbon_${sanitizedTeamName}${path.extname(files.twibbon_proof[0].originalname) || '.pdf'}`,
-          files.twibbon_proof[0].mimetype,
-          teamFolderId,
-        ),
-        uploadBufferToDrive(
-          files.poster_proof[0].buffer,
-          `Share_Poster_${sanitizedTeamName}${path.extname(files.poster_proof[0].originalname) || '.pdf'}`,
-          files.poster_proof[0].mimetype,
-          teamFolderId,
-        ),
-        uploadBufferToDrive(
-          files.broadcast_proof[0].buffer,
-          `Share_Broadcast_${sanitizedTeamName}${path.extname(files.broadcast_proof[0].originalname) || '.pdf'}`,
-          files.broadcast_proof[0].mimetype,
-          teamFolderId,
-        ),
-      ]);
-
+    // Files are already on local disk; Drive upload happens afterwards in the background.
     const requirementFileMappings = [
-      { event: 'IBCC_REQUIREMENT_KTM', type: 'IDCARD' as const, file: files.ktm_file[0], upload: ktmUpload },
-      { event: 'IBCC_REQUIREMENT_FOLLOW', type: 'PROMOTION' as const, file: files.follow_proof[0], upload: followUpload },
-      { event: 'IBCC_REQUIREMENT_TWIBBON', type: 'PROMOTION' as const, file: files.twibbon_proof[0], upload: twibbonUpload },
-      { event: 'IBCC_REQUIREMENT_POSTER', type: 'PROMOTION' as const, file: files.poster_proof[0], upload: posterUpload },
-      { event: 'IBCC_REQUIREMENT_BROADCAST', type: 'PROMOTION' as const, file: files.broadcast_proof[0], upload: broadcastUpload },
+      { event: 'IBCC_REQUIREMENT_KTM', type: 'IDCARD' as const, file: files.ktm_file[0] },
+      { event: 'IBCC_REQUIREMENT_FOLLOW', type: 'PROMOTION' as const, file: files.follow_proof[0] },
+      { event: 'IBCC_REQUIREMENT_TWIBBON', type: 'PROMOTION' as const, file: files.twibbon_proof[0] },
+      { event: 'IBCC_REQUIREMENT_POSTER', type: 'PROMOTION' as const, file: files.poster_proof[0] },
+      { event: 'IBCC_REQUIREMENT_BROADCAST', type: 'PROMOTION' as const, file: files.broadcast_proof[0] },
     ];
 
+    const pendingFileIds: number[] = [];
     for (const item of requirementFileMappings) {
-      await tx.submission.create({
+      const submission = await tx.submission.create({
         data: {
           teamId: team.id,
           userId: leaderUser.id,
@@ -232,16 +196,19 @@ export async function registerTeam(
           stage: 'REGISTRATION',
           event: item.event,
           type: item.type,
+          // The official submission time is when the request arrived, not when Drive finished.
+          submittedAt: receivedAt,
           Files: {
             create: {
-              filePath: item.upload.webViewLink,
-              gdriveId: item.upload.fileId,
+              filePath: pendingFilePath(item.file),
               fileType: item.file.mimetype,
               fileSize: item.file.size,
             },
           },
         },
+        include: { Files: { select: { id: true } } },
       });
+      pendingFileIds.push(...submission.Files.map((f) => f.id));
     }
 
     await tx.masterTeamCode.update({
@@ -256,12 +223,14 @@ export async function registerTeam(
     return {
       team,
       teamCode: selectedCodeRecord.code,
-      teamFolderId,
+      pendingFileIds,
     };
   }, {
     maxWait: 15000,
-    timeout: 60000,
+    timeout: 20000,
   });
+
+  result.pendingFileIds.forEach(enqueueDriveUpload);
 
   const leaderEmailHtml = renderTeamRegistrationConfirmationEmail({
     leaderName: leaderUser.name,
@@ -282,13 +251,17 @@ export async function registerTeam(
     teamId: result.team.id,
     teamName: result.team.name,
     teamCode: result.teamCode,
-    driveFolderId: result.teamFolderId,
-    driveFolderUrl: `https://drive.google.com/drive/folders/${result.teamFolderId}`,
+    driveFolderId: null,
+    driveFolderUrl: null,
+    filesProcessing: true,
     status: 'REGISTERED',
     memberCount: 1 + (input.members || []).length,
     waGroupLink: null,
   };
 }
+
+const isPendingFile = (file: { gdriveId: string | null; filePath: string }) =>
+  !file.gdriveId && file.filePath.startsWith(PENDING_PREFIX);
 
 export async function getMyTeam(userId: number) {
   // Single query joins all related models to eliminate N+1 roundtrips.
@@ -376,6 +349,11 @@ export async function getMyTeam(userId: number) {
       ? 'SEMIFINAL'
       : 'REGISTRATION';
 
+  const paymentFile = paymentSubmission?.Files?.[0];
+  const pendingFileCount = team.submissionTeam
+    .flatMap((s) => s.Files)
+    .filter(isPendingFile).length;
+
   let paymentStatus = 'NOT_SUBMITTED';
   if (statusCode === 'PAID') {
     paymentStatus = 'PAID';
@@ -395,7 +373,8 @@ export async function getMyTeam(userId: number) {
     payment: {
       status: paymentStatus,
       isUploaded: Boolean(paymentSubmission),
-      fileUrl: paymentSubmission?.Files?.[0]?.filePath || null,
+      fileUrl: paymentFile && !isPendingFile(paymentFile) ? paymentFile.filePath : null,
+      isProcessing: Boolean(paymentFile && isPendingFile(paymentFile)),
       submittedAt: paymentSubmission?.submittedAt || null,
     },
     selectionResult: {
@@ -418,6 +397,9 @@ export async function getMyTeam(userId: number) {
       paymentSubmittedAt: paymentSubmission?.submittedAt || null,
       preliminaryOutputSubmitted: Boolean(preliminarySubmission),
       preliminarySubmittedAt: preliminarySubmission?.submittedAt || null,
+      // True while any uploaded file is still being copied to Google Drive.
+      filesProcessing: pendingFileCount > 0,
+      pendingFileCount,
     },
   };
 }
@@ -426,6 +408,7 @@ export async function submitPreliminarySlideDeck(
   leaderUserId: number,
   file: Express.Multer.File,
   teamIdInput?: number,
+  receivedAt: Date = new Date(),
 ) {
   const team = await prisma.team.findFirst({
     where: {
@@ -437,26 +420,6 @@ export async function submitPreliminarySlideDeck(
   if (!team) {
     throw new Error('You are not the leader of an active IBCC team or team was not found.');
   }
-
-  const targetFolderId =
-    env.GOOGLE_DRIVE_FOLDER_PRELIMINARY_ID ||
-    env.GOOGLE_DRIVE_FOLDER_IBCC_ID ||
-    env.GOOGLE_DRIVE_FOLDER_ID;
-
-  if (!targetFolderId) {
-    throw new Error('Google Drive Preliminary folder ID is not configured.');
-  }
-
-  const ext = path.extname(file.originalname) || '.pdf';
-  const sanitizedTeamName = team.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const fileName = `[${team.code}]_${sanitizedTeamName}_Preliminary${ext}`;
-
-  const uploadResult = await uploadBufferToDrive(
-    file.buffer,
-    fileName,
-    file.mimetype,
-    targetFolderId,
-  );
 
   const submission = await prisma.submission.create({
     data: {
@@ -466,10 +429,10 @@ export async function submitPreliminarySlideDeck(
       stage: 'PREELIM',
       event: 'IBCC_PRELIMINARY_OUTPUT',
       type: 'TASK',
+      submittedAt: receivedAt,
       Files: {
         create: {
-          filePath: uploadResult.webViewLink,
-          gdriveId: uploadResult.fileId,
+          filePath: pendingFilePath(file),
           fileType: file.mimetype,
           fileSize: file.size,
         },
@@ -480,12 +443,15 @@ export async function submitPreliminarySlideDeck(
     },
   });
 
+  submission.Files.forEach((f) => enqueueDriveUpload(f.id));
+
   return {
     submissionId: submission.id,
     stage: submission.stage,
     submittedAt: submission.submittedAt,
-    fileUrl: uploadResult.webViewLink,
-    gdriveId: uploadResult.fileId,
+    fileUrl: null,
+    gdriveId: null,
+    filesProcessing: true,
   };
 }
 
@@ -493,6 +459,7 @@ export async function submitSemifinalSlideDeck(
   leaderUserId: number,
   file: Express.Multer.File,
   teamIdInput?: number,
+  receivedAt: Date = new Date(),
 ) {
   const team = await prisma.team.findFirst({
     where: {
@@ -505,33 +472,7 @@ export async function submitSemifinalSlideDeck(
     throw new Error('You are not the leader of an active IBCC team or team was not found.');
   }
 
-  const targetFolderId =
-    env.GOOGLE_DRIVE_FOLDER_SEMIFINAL_SLIDES_ID ||
-    env.GOOGLE_DRIVE_FOLDER_IBCC_ID ||
-    env.GOOGLE_DRIVE_FOLDER_ID;
-
-  if (!targetFolderId) {
-    throw new Error('Google Drive Semifinal Slides folder ID is not configured.');
-  }
-
-  const ext = path.extname(file.originalname) || '.pdf';
-  const sanitizedTeamName = team.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const fileName = `[${team.code}]_${sanitizedTeamName}_Semifinal_Slides${ext}`;
-
-  const uploadResult = await uploadBufferToDrive(
-    file.buffer,
-    fileName,
-    file.mimetype,
-    targetFolderId,
-  );
-
-  await prisma.slideDeck.create({
-    data: {
-      teamId: team.id,
-      fileUrl: uploadResult.webViewLink,
-    },
-  });
-
+  // The SlideDeck row is created by the Drive worker once the link exists.
   const submission = await prisma.submission.create({
     data: {
       teamId: team.id,
@@ -540,10 +481,10 @@ export async function submitSemifinalSlideDeck(
       stage: 'SEMIFINAL',
       event: 'IBCC',
       type: 'TASK',
+      submittedAt: receivedAt,
       Files: {
         create: {
-          filePath: uploadResult.webViewLink,
-          gdriveId: uploadResult.fileId,
+          filePath: pendingFilePath(file),
           fileType: file.mimetype,
           fileSize: file.size,
         },
@@ -554,12 +495,15 @@ export async function submitSemifinalSlideDeck(
     },
   });
 
+  submission.Files.forEach((f) => enqueueDriveUpload(f.id));
+
   return {
     submissionId: submission.id,
     stage: submission.stage,
     submittedAt: submission.submittedAt,
-    fileUrl: uploadResult.webViewLink,
-    gdriveId: uploadResult.fileId,
+    fileUrl: null,
+    gdriveId: null,
+    filesProcessing: true,
   };
 }
 
@@ -567,6 +511,7 @@ export async function submitPaymentProof(
   leaderUserId: number,
   file: Express.Multer.File,
   teamIdInput?: number,
+  receivedAt: Date = new Date(),
 ) {
   const team = await prisma.team.findFirst({
     where: {
@@ -578,26 +523,6 @@ export async function submitPaymentProof(
   if (!team) {
     throw new Error('You are not the leader of an active IBCC team or team was not found.');
   }
-
-  const targetFolderId =
-    env.GOOGLE_DRIVE_FOLDER_PAYMENT_ID ||
-    env.GOOGLE_DRIVE_FOLDER_IBCC_ID ||
-    env.GOOGLE_DRIVE_FOLDER_ID;
-
-  if (!targetFolderId) {
-    throw new Error('Google Drive Payment folder ID is not configured.');
-  }
-
-  const ext = path.extname(file.originalname) || '.jpg';
-  const sanitizedTeamName = team.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const fileName = `[${team.code}]_${sanitizedTeamName}_PaymentProof${ext}`;
-
-  const uploadResult = await uploadBufferToDrive(
-    file.buffer,
-    fileName,
-    file.mimetype,
-    targetFolderId,
-  );
 
   const submission = await prisma.submission.create({
     data: {
@@ -607,10 +532,10 @@ export async function submitPaymentProof(
       stage: 'REGISTRATION',
       event: 'IBCC',
       type: 'PAYMENT',
+      submittedAt: receivedAt,
       Files: {
         create: {
-          filePath: uploadResult.webViewLink,
-          gdriveId: uploadResult.fileId,
+          filePath: pendingFilePath(file),
           fileType: file.mimetype,
           fileSize: file.size,
         },
@@ -621,13 +546,16 @@ export async function submitPaymentProof(
     },
   });
 
+  submission.Files.forEach((f) => enqueueDriveUpload(f.id));
+
   return {
     submissionId: submission.id,
     stage: submission.stage,
     type: submission.type,
     submittedAt: submission.submittedAt,
-    fileUrl: uploadResult.webViewLink,
-    gdriveId: uploadResult.fileId,
+    fileUrl: null,
+    gdriveId: null,
+    filesProcessing: true,
   };
 }
 

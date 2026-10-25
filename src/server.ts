@@ -11,6 +11,7 @@ import { apiRateLimiter } from './middlewares/rate-limiter.middleware'
 import { swaggerSpec, swaggerUiOptions } from './docs/swagger'
 import { startTokenCleanupJob } from './jobs/token-cleanup.job'
 import { startEmailSchedulerJob } from './jobs/email-scheduler.job'
+import { startDriveUploadWorker } from './jobs/drive-upload.job'
 import routes from './routes'
 import path from 'path'
 
@@ -70,6 +71,7 @@ app.use(errorHandler)
 if (env.NODE_ENV !== 'test') {
   startTokenCleanupJob()
   startEmailSchedulerJob()
+  startDriveUploadWorker()
 
   app.listen(env.PORT, () => {
     console.log(`API running at ${env.APP_URL}`)
