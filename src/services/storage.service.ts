@@ -114,7 +114,7 @@ export async function getOrCreateTeamFolder(
  * Mengunggah buffer memori langsung ke target Google Drive folder via stream
  */
 export async function uploadBufferToDrive(
-  fileBuffer: Buffer,
+  fileBuffer: Buffer | NodeJS.ReadableStream,
   fileName: string,
   mimeType: string,
   folderId: string,
@@ -141,7 +141,7 @@ export async function uploadBufferToDrive(
   } catch {
   }
 
-  const mediaStream = Readable.from(fileBuffer);
+  const mediaStream = Buffer.isBuffer(fileBuffer) ? Readable.from(fileBuffer) : fileBuffer;
 
   const response = await drive.files.create({
     requestBody: {
@@ -198,7 +198,7 @@ export async function uploadFileToDrive(file: Express.Multer.File): Promise<stri
   const uniqueName = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}${ext}`;
 
   const result = await uploadBufferToDrive(
-    file.buffer,
+    file.buffer ?? fs.createReadStream(file.path),
     uniqueName,
     file.mimetype,
     folderId,
@@ -207,8 +207,27 @@ export async function uploadFileToDrive(file: Express.Multer.File): Promise<stri
   return result.webViewLink;
 }
 
-const storage = multer.memoryStorage();
-export const memoryStorage = storage;
+/**
+ * Incoming files are spooled to disk (not RAM) and uploaded to Drive in the background,
+ * so a burst of submissions near a deadline neither exhausts memory nor waits on Drive.
+ */
+export const PENDING_UPLOAD_DIR = path.resolve(process.cwd(), "uploads", "pending");
+export const PENDING_PREFIX = "pending:";
+
+fs.mkdirSync(PENDING_UPLOAD_DIR, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, PENDING_UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, "");
+    cb(null, `${Date.now()}-${crypto.randomBytes(8).toString("hex")}${ext}`);
+  },
+});
+
+/** Value for `SubmissionFile.filePath` while the file waits for its Drive upload. */
+export function pendingFilePath(file: Express.Multer.File): string {
+  return `${PENDING_PREFIX}${path.basename(file.path)}`;
+}
 
 const ALLOWED_IMAGE_TYPES = [
   "image/jpeg",

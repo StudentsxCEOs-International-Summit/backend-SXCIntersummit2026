@@ -66,6 +66,7 @@ export async function registerTeamHandler(req: AuthRequest, res: Response) {
       },
       input,
       registrationFiles,
+      res.locals.receivedAt,
     );
 
     return ok(res, data, 'Team successfully registered for IBCC 2026!', 201);
@@ -122,7 +123,7 @@ export async function submitPreliminaryHandler(req: AuthRequest, res: Response) 
 
     const teamId = req.body.teamId ? Number(req.body.teamId) : undefined;
 
-    const data = await submitPreliminarySlideDeck(Number(leaderUser.id), file, teamId);
+    const data = await submitPreliminarySlideDeck(Number(leaderUser.id), file, teamId, res.locals.receivedAt);
     return ok(res, data, 'Preliminary slide deck submitted successfully.', 201);
   } catch (error: any) {
     if (req.file?.path) {
@@ -149,7 +150,7 @@ export async function submitSemifinalHandler(req: AuthRequest, res: Response) {
     }
 
     const teamId = req.body.teamId ? Number(req.body.teamId) : undefined;
-    const data = await submitSemifinalSlideDeck(Number(leaderUser.id), file, teamId);
+    const data = await submitSemifinalSlideDeck(Number(leaderUser.id), file, teamId, res.locals.receivedAt);
 
     return ok(res, data, 'Semifinal slide deck submitted successfully.', 201);
   } catch (error: any) {
@@ -177,9 +178,9 @@ export async function submitPaymentHandler(req: AuthRequest, res: Response) {
     }
 
     const teamId = req.body.teamId ? Number(req.body.teamId) : undefined;
-    const data = await submitPaymentProof(Number(leaderUser.id), file, teamId);
+    const data = await submitPaymentProof(Number(leaderUser.id), file, teamId, res.locals.receivedAt);
 
-    return ok(res, data, 'Payment proof uploaded successfully to Google Drive.', 201);
+    return ok(res, data, 'Payment proof received and is being processed.', 201);
   } catch (error: any) {
     if (req.file?.path) {
       deleteFile(req.file.path);
