@@ -29,6 +29,13 @@ export function getMailTransporter(): nodemailer.Transporter | null {
       user: env.SMTP_USER,
       pass: env.SMTP_PASS,
     },
+    // Fail fast instead of holding the request for nodemailer's 2-minute default when the
+    // SMTP port is blocked, and reuse connections so Gmail sees fewer logins.
+    pool: true,
+    maxConnections: 3,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
   });
 
   return transporter;

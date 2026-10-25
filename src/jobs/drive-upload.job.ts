@@ -143,7 +143,8 @@ function pump() {
         const delay = Math.min(15_000 * 2 ** (attempts - 1), MAX_BACKOFF_MS)
         retryState.set(id, { attempts, notBefore: Date.now() + delay })
         console.error(
-          `[DRIVE QUEUE] File ${id} failed (attempt ${attempts}), retry in ${Math.round(delay / 1000)}s: ${error.message}`,
+          `[DRIVE QUEUE] File ${id} failed (attempt ${attempts}), retry in ${Math.round(delay / 1000)}s: ${error.message}` +
+            (attempts >= 5 ? ' (REPEATED FAILURE: check Drive credentials)' : ''),
         )
       })
       .finally(() => {
@@ -159,16 +160,35 @@ export function enqueueDriveUpload(id: number) {
   pump()
 }
 
+const BACKLOG_COUNT = 20
+const BACKLOG_AGE_MS = 10 * 60_000
+const BACKLOG_WARN_EVERY_MS = 5 * 60_000
+let lastBacklogWarning = 0
+
+/** One loud line (at most every 5 minutes) when files keep waiting, e.g. the Drive token is dead. */
+function warnAboutBacklog(count: number, oldest: Date | undefined, now: number) {
+  if (count === 0 || now - lastBacklogWarning < BACKLOG_WARN_EVERY_MS) return
+  const ageMs = oldest ? now - oldest.getTime() : 0
+  if (count < BACKLOG_COUNT && ageMs < BACKLOG_AGE_MS) return
+
+  lastBacklogWarning = now
+  console.warn(
+    `[DRIVE QUEUE] BACKLOG: ${count} file(s) still waiting for Google Drive, oldest for ${Math.round(ageMs / 60_000)} min. ` +
+      `Check the Drive token and disk space (uploads/pending).`,
+  )
+}
+
 async function sweepPending() {
   try {
     const rows = await prisma.submissionFile.findMany({
       where: { gdriveId: null, filePath: { startsWith: PENDING_PREFIX } },
-      select: { id: true },
+      select: { id: true, uploadedAt: true },
       orderBy: { id: 'asc' },
       take: SWEEP_BATCH,
     })
 
     const now = Date.now()
+    warnAboutBacklog(rows.length, rows[0]?.uploadedAt, now)
     for (const { id } of rows) {
       if ((retryState.get(id)?.notBefore ?? 0) <= now) enqueueDriveUpload(id)
     }

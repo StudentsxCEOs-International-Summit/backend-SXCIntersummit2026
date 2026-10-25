@@ -16,7 +16,11 @@ const envSchema = z
     CORS_ORIGIN: z.string().optional(),
     SMTP_HOST: z.string().optional(),
     SMTP_PORT: z.coerce.number().int().optional(),
-    SMTP_SECURE: z.coerce.boolean().optional(),
+    // z.coerce.boolean() would turn the string "false" into true and break port 587 (STARTTLS).
+    SMTP_SECURE: z
+      .enum(["true", "false"])
+      .transform((value) => value === "true")
+      .optional(),
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
     SMTP_FROM: z.string().optional(),
