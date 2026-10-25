@@ -11,12 +11,15 @@ import { apiRateLimiter } from './middlewares/rate-limiter.middleware'
 import { swaggerSpec, swaggerUiOptions } from './docs/swagger'
 import { startTokenCleanupJob } from './jobs/token-cleanup.job'
 import { startEmailSchedulerJob } from './jobs/email-scheduler.job'
+import { startDriveUploadWorker } from './jobs/drive-upload.job'
 import routes from './routes'
 import path from 'path'
 
 const app = express()
 
-app.set('trust proxy', true)
+// Number of reverse proxies in front of the app (nginx = 1, Cloudflare + nginx = 2); `true` would
+// let clients spoof their IP through X-Forwarded-For and dodge the rate limiter.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1))
 
 app.use(
   helmet({
@@ -70,6 +73,7 @@ app.use(errorHandler)
 if (env.NODE_ENV !== 'test') {
   startTokenCleanupJob()
   startEmailSchedulerJob()
+  startDriveUploadWorker()
 
   app.listen(env.PORT, () => {
     console.log(`API running at ${env.APP_URL}`)

@@ -317,14 +317,43 @@ export async function blacklistToken(token: string): Promise<void> {
       expiresAt,
     },
   })
+  revokedTokens.set(token, expiresAt.getTime())
+}
+
+/**
+ * Revoked tokens (logouts) are few, so they are kept in memory and re-read from the database
+ * every minute. This keeps a database round trip off every authenticated request.
+ */
+const REVOKED_REFRESH_MS = 60_000
+const revokedTokens = new Map<string, number>()
+let revokedLoadedAt = 0
+let revokedLoading: Promise<void> | null = null
+
+function refreshRevokedTokens() {
+  revokedLoading ??= prisma.blacklist
+    .findMany({ where: { expiresAt: { gt: new Date() } }, select: { token: true, expiresAt: true } })
+    .then((rows) => {
+      const now = Date.now()
+      for (const [token, exp] of revokedTokens) if (exp <= now) revokedTokens.delete(token)
+      for (const row of rows) revokedTokens.set(row.token, row.expiresAt.getTime())
+      revokedLoadedAt = Date.now()
+    })
+    .finally(() => {
+      revokedLoading = null
+    })
+  return revokedLoading
 }
 
 export async function isTokenBlacklisted(token: string): Promise<boolean> {
-  const record = await prisma.blacklist.findUnique({
-    where: { token },
-  })
+  if (!revokedLoadedAt) {
+    await refreshRevokedTokens()
+  } else if (Date.now() - revokedLoadedAt > REVOKED_REFRESH_MS) {
+    // Stale: refresh in the background and answer from what is already loaded.
+    refreshRevokedTokens().catch((error) => console.error('[AUTH] Blacklist refresh failed:', error))
+  }
 
-  return Boolean(record)
+  const exp = revokedTokens.get(token)
+  return exp !== undefined && exp > Date.now()
 }
 
 export async function authenticateWithGoogle(googleUser: GoogleUserInfo) {

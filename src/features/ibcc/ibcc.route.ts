@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { RequestHandler, Router } from 'express';
 import { requireAuth, requireAdmin } from '../../middlewares/auth.middleware';
 import { validateRequest } from '../../middlewares/validation.middleware';
 import {
@@ -29,10 +29,17 @@ import {
 
 const ibccRouter = Router();
 
+// Official submission time: when the request reached us, before the upload body is read.
+const stampReceivedAt: RequestHandler = (_req, res, next) => {
+  res.locals.receivedAt = new Date();
+  next();
+};
+
 // Team registration and team dashboard
 ibccRouter.post(
   '/register',
   requireAuth,
+  stampReceivedAt,
   uploadRegistrationRequirements,
   validateRequest({ body: registerTeamSchema }),
   registerTeamHandler,
@@ -44,6 +51,7 @@ ibccRouter.get('/my-team', requireAuth, getMyTeamHandler);
 ibccRouter.post(
   '/submission/preliminary',
   requireAuth,
+  stampReceivedAt,
   uploadPreliminarySlideDeck,
   submitPreliminaryHandler,
 );
@@ -51,6 +59,7 @@ ibccRouter.post(
 ibccRouter.post(
   '/submission/semifinal',
   requireAuth,
+  stampReceivedAt,
   uploadSlides.single('file'),
   submitSemifinalHandler,
 );
@@ -58,6 +67,7 @@ ibccRouter.post(
 ibccRouter.post(
   '/submission/payment',
   requireAuth,
+  stampReceivedAt,
   uploadPayment.single('file'),
   submitPaymentHandler,
 );
