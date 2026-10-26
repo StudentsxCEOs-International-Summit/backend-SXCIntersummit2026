@@ -47,6 +47,10 @@ app.use(express.json({ limit: '2mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 
+// Files waiting for their Drive upload (ID cards, payment proofs) must never be served from here.
+app.use('/uploads/pending', (_req, res) => {
+  res.status(404).json({ success: false, message: 'Not found' })
+})
 app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')))
 app.use('/public', express.static(path.resolve(process.cwd(), 'public')))
 
@@ -85,7 +89,7 @@ if (env.NODE_ENV !== 'test') {
   startEmailSchedulerJob()
   startDriveUploadWorker()
 
-  app.listen(env.PORT, () => {
+  const server = app.listen(env.PORT, () => {
     console.log(`API running at ${env.APP_URL}`)
     if (env.NODE_ENV !== 'production') {
       console.log(`Swagger Docs available at ${env.APP_URL}/api-docs`)
@@ -93,6 +97,12 @@ if (env.NODE_ENV !== 'test') {
     console.log(`NODE_ENV : ${env.NODE_ENV}`)
     console.log(`APP_ENV  : ${env.APP_ENV}`)
   })
+
+  // Node cuts a request that is still arriving after 5 minutes by default; 50 MB over a weak
+  // mobile connection can take longer. nginx already buffers the body, so this is a safety net.
+  server.requestTimeout = 10 * 60_000
+  server.headersTimeout = 65_000
+  server.keepAliveTimeout = 65_000
 }
 
 export default app

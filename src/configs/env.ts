@@ -16,10 +16,20 @@ const envSchema = z
     CORS_ORIGIN: z.string().optional(),
     SMTP_HOST: z.string().optional(),
     SMTP_PORT: z.coerce.number().int().optional(),
-    SMTP_SECURE: z.coerce.boolean().optional(),
+    // z.coerce.boolean() would turn the string "false" into true and break port 587 (STARTTLS).
+    SMTP_SECURE: z
+      .enum(["true", "false"])
+      .transform((value) => value === "true")
+      .optional(),
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
     SMTP_FROM: z.string().optional(),
+    // Optional second sender. Mails alternate between the accounts and fail over if one is refused.
+    SMTP_USER_2: z.string().optional(),
+    SMTP_PASS_2: z.string().optional(),
+    SMTP_FROM_2: z.string().optional(),
+    /** Soft cap per sender per 24h before the other account is preferred (Gmail allows ~500). */
+    SMTP_DAILY_LIMIT: z.coerce.number().int().positive().optional(),
     EMAIL_LOGO_URL: z
       .url()
       .default(
@@ -45,6 +55,16 @@ const envSchema = z
     GOOGLE_DRIVE_FOLDER_PRELIMINARY_ID: z.string().optional(),
     GOOGLE_DRIVE_FOLDER_PAYMENT_ID: z.string().optional(),
     GOOGLE_DRIVE_FOLDER_SEMIFINAL_SLIDES_ID: z.string().optional(),
+    // Optional second Drive account (failover when the first is full or its token is dead).
+    // It reuses the same OAuth client; it needs its own token and its own folders.
+    GOOGLE_DRIVE_REFRESH_TOKEN_2: z.string().optional(),
+    GOOGLE_DRIVE_FOLDER_UPLOADS_ROOT_ID_2: z.string().optional(),
+    GOOGLE_DRIVE_FOLDER_IBCC_ID_2: z.string().optional(),
+    GOOGLE_DRIVE_FOLDER_ID_2: z.string().optional(),
+    GOOGLE_DRIVE_FOLDER_REGISTRATION_ID_2: z.string().optional(),
+    GOOGLE_DRIVE_FOLDER_PRELIMINARY_ID_2: z.string().optional(),
+    GOOGLE_DRIVE_FOLDER_PAYMENT_ID_2: z.string().optional(),
+    GOOGLE_DRIVE_FOLDER_SEMIFINAL_SLIDES_ID_2: z.string().optional(),
     CRON_SECRET: z.string().optional(),
   })
   .superRefine((value, ctx) => {

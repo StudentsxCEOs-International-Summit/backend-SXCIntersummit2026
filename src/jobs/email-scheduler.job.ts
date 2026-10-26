@@ -64,7 +64,7 @@ async function sendDeadlineReminders(): Promise<number> {
         contentHtml: `
           <p style="font-size: 15px; line-height: 1.6; margin-bottom: 16px;">Hi <strong>${team.leader.name}</strong>,</p>
           <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">This is a reminder that the registration deadline for <strong>SXC International Summit 2026</strong> is in <strong>${daysUntilDeadline} day(s)</strong> (${deadline.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}).</p>
-          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">Please ensure all required documents and payment are submitted before the deadline.</p>
+          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">Please ensure all required registration documents are submitted before the deadline.</p>
           <p style="font-size: 15px; line-height: 1.6; margin-bottom: 0;">Best regards,<br><strong>StudentsxCEOs International Summit 2026 Team</strong></p>
         `
       });
@@ -97,18 +97,23 @@ async function sendDeadlineReminders(): Promise<number> {
   return sent;
 }
 
+/** Semifinal fee shown in the reminder (keep in sync with the frontend's SEMIFINAL_FEE_IDR). */
+const SEMIFINAL_FEE_TEXT = "Rp 180.000";
+
 /**
- * Send payment reminders to teams that have not uploaded payment proof.
+ * Send payment reminders to teams that passed the preliminary but have not uploaded payment proof.
+ * The preliminary round is free; payment only starts at the semifinal, so registered teams that
+ * are still in the preliminary must never get this email.
  */
 async function sendPaymentReminders(): Promise<number> {
   const cfg = getAppConfig();
   const paymentDays = cfg.PAYMENT_REMINDER_DAYS || 3;
-  const cutoffDate = new Date(Date.now() - paymentDays * 24 * 60 * 60 * 1000);
+  const remindEveryMs = paymentDays * 24 * 60 * 60 * 1000;
 
   const teamsNeedingPayment = await prisma.team.findMany({
     where: {
-      status: 15,
-      createdAt: { lt: cutoffDate },
+      statuscode: { code: "PASSED_PRELIMINARY" },
+      submissionTeam: { none: { type: "PAYMENT" } },
     },
     include: { leader: true },
   });
@@ -117,33 +122,33 @@ async function sendPaymentReminders(): Promise<number> {
   for (const team of teamsNeedingPayment) {
     if (!team.leader?.email) continue;
 
-    // Check if we already sent a payment reminder in the last 24 hours
+    // Remind at most once per reminder period, so one team is not mailed every day.
     const recentEmail = await prisma.emailLog.findFirst({
       where: {
         toEmail: team.leader.email,
         template: "payment_reminder",
-        sentAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        sentAt: { gt: new Date(Date.now() - remindEveryMs) },
       },
     });
 
-    if (recentEmail) continue; // Skip – already reminded today
+    if (recentEmail) continue;
 
     try {
       const html = renderEmailTemplate({
-        title: "Payment Reminder",
+        title: "Semifinal Payment Reminder",
         contentHtml: `
           <p style="font-size: 15px; line-height: 1.6; margin-bottom: 16px;">Hi <strong>${team.leader.name}</strong>,</p>
-          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">We noticed that your team <strong>${team.name}</strong> has not yet submitted payment proof for <strong>SXC International Summit 2026</strong>.</p>
-          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">Please upload your payment proof as soon as possible to complete your registration.</p>
+          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">Congratulations again on passing the preliminary round! Your team <strong>${team.name}</strong> has not yet submitted the semifinal payment proof for <strong>SXC International Summit 2026</strong>.</p>
+          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">The semifinal fee is <strong>${SEMIFINAL_FEE_TEXT}</strong>. Please transfer it and upload your payment proof from the My Team page as soon as possible.</p>
           <p style="font-size: 15px; line-height: 1.6; margin-bottom: 0;">Best regards,<br><strong>StudentsxCEOs International Summit 2026 Team</strong></p>
         `
       });
 
       await sendMail({
         to: team.leader.email,
-        subject: `[SXC Intersummit 2026] 💳 Payment Reminder – ${team.name}`,
+        subject: `[SXC Intersummit 2026] 💳 Semifinal Payment Reminder – ${team.name}`,
         html,
-        text: `Hi ${team.leader.name}, please upload payment proof for team ${team.name}.`,
+        text: `Hi ${team.leader.name}, please pay the semifinal fee (${SEMIFINAL_FEE_TEXT}) and upload the payment proof for team ${team.name}.`,
       });
 
       await prisma.emailLog.create({
