@@ -37,3 +37,17 @@ export const authRateLimiter = rateLimit({
     message: 'Too many attempts, please try again in a few minutes.',
   },
 })
+
+/** Public Contact form: a handful of enquiries per hour per IP is plenty and keeps spam out of the inbox. */
+export const contactRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false },
+  skip: skipCron,
+  message: {
+    success: false,
+    message: 'Too many messages from this connection. Please try again later.',
+  },
+})
