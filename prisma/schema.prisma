@@ -442,3 +442,25 @@ model TeamMemberInvitation {
   @@index([email])
   @@map("team_member_invitation")
 }
+
+enum ContactMessageStatus {
+  NEW
+  READ
+  ARCHIVED
+}
+
+/// Partnership enquiries sent from the public Contact page.
+model ContactMessage {
+  id           Int                  @id @default(autoincrement())
+  name         String
+  organization String
+  email        String
+  type         String
+  message      String
+  status       ContactMessageStatus @default(NEW)
+  createdAt    DateTime             @default(now())
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("contact_message")
+}

@@ -65,6 +65,8 @@ const envSchema = z
     GOOGLE_DRIVE_FOLDER_PRELIMINARY_ID_2: z.string().optional(),
     GOOGLE_DRIVE_FOLDER_PAYMENT_ID_2: z.string().optional(),
     GOOGLE_DRIVE_FOLDER_SEMIFINAL_SLIDES_ID_2: z.string().optional(),
+    // Optional: committee address that gets an email for every new Contact page enquiry.
+    CONTACT_NOTIFY_EMAIL: z.email().optional(),
     CRON_SECRET: z.string().optional(),
   })
   .superRefine((value, ctx) => {
