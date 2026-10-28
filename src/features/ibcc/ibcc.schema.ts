@@ -32,10 +32,15 @@ const parseBoolean = (val: unknown) => {
 };
 
 const phoneRegex = /^(\+62|62|0)8[1-9][0-9]{6,10}$/;
+const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .pipe(z.email('Please enter a valid email address'));
 
 export const memberItemSchema = z.object({
   fullName: z.string().trim().min(2, 'Full name is required'),
-  email: z.email('Please enter a valid email address').trim().toLowerCase(),
+  email: emailSchema,
   whatsapp: z.string().trim().regex(phoneRegex, 'Please enter a valid WhatsApp number (e.g. 08123456789 or +628123456789)'),
   institution: z.string().trim().min(3, 'Institution and major are required'),
   yearOfStudy: yearOfStudyEnum,

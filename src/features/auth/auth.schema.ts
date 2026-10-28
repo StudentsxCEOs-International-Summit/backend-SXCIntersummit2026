@@ -1,5 +1,11 @@
 import { z } from 'zod'
 
+const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .pipe(z.email('Please enter a valid email address'))
+
 export const strongPasswordSchema = z
   .string()
   .min(8, 'Password must be at least 8 characters long')
@@ -10,26 +16,26 @@ export const strongPasswordSchema = z
 
 export const registerSchema = z.object({
   name: z.string().trim().min(2, 'Full name is required'),
-  email: z.email('Please enter a valid email address').trim().toLowerCase(),
+  email: emailSchema,
   password: strongPasswordSchema,
 })
 
 export const loginSchema = z.object({
-  email: z.email('Please enter a valid email address').trim().toLowerCase(),
+  email: emailSchema,
   password: z.string().min(1, 'Password is required'),
 })
 
 export const otpSchema = z.object({
-  email: z.email('Please enter a valid email address').trim().toLowerCase(),
+  email: emailSchema,
   otp: z.string().trim().length(6, 'OTP must be exactly 6 digits').regex(/^[0-9]+$/, 'OTP must contain only numbers'),
 })
 
 export const resendOtpSchema = z.object({
-  email: z.email('Please enter a valid email address').trim().toLowerCase(),
+  email: emailSchema,
 })
 
 export const forgotPasswordSchema = z.object({
-  email: z.email('Please enter a valid email address').trim().toLowerCase(),
+  email: emailSchema,
 })
 
 export const resetPasswordSchema = z.object({
