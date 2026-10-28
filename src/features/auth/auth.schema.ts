@@ -9,27 +9,27 @@ export const strongPasswordSchema = z
   .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character')
 
 export const registerSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  email: z.email('Invalid email address'),
+  name: z.string().trim().min(2, 'Full name is required'),
+  email: z.email('Please enter a valid email address').trim().toLowerCase(),
   password: strongPasswordSchema,
 })
 
 export const loginSchema = z.object({
-  email: z.email('Invalid email address'),
+  email: z.email('Please enter a valid email address').trim().toLowerCase(),
   password: z.string().min(1, 'Password is required'),
 })
 
 export const otpSchema = z.object({
-  email: z.email('Invalid email address'),
-  otp: z.string().length(6, 'OTP must be exactly 6 digits'),
+  email: z.email('Please enter a valid email address').trim().toLowerCase(),
+  otp: z.string().trim().length(6, 'OTP must be exactly 6 digits').regex(/^[0-9]+$/, 'OTP must contain only numbers'),
 })
 
 export const resendOtpSchema = z.object({
-  email: z.email('Invalid email address'),
+  email: z.email('Please enter a valid email address').trim().toLowerCase(),
 })
 
 export const forgotPasswordSchema = z.object({
-  email: z.email('Invalid email address'),
+  email: z.email('Please enter a valid email address').trim().toLowerCase(),
 })
 
 export const resetPasswordSchema = z.object({
@@ -49,6 +49,3 @@ export type OtpInput = z.infer<typeof otpSchema>
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
 export type GoogleCallbackQuery = z.infer<typeof googleCallbackQuerySchema>
-
-
-
