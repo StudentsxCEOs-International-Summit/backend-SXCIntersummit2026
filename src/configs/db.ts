@@ -12,10 +12,15 @@ function createPrismaClient(): PrismaClient {
   const isProduction = env.NODE_ENV === "production";
 
   const pool = new Pool({
+    // Runtime application must use DATABASE_URL (Supavisor Transaction Pooler port 6543)
+    // to preserve the 60-connection ceiling on Supabase Nano.
+    // DIRECT_URL (port 5432) remains reserved for Prisma schema migrations.
     connectionString: env.DATABASE_URL,
     max: isProduction ? 10 : 5,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
+    // Keep idle connections for 5 minutes with TCP keep-alive to avoid frequent TLS handshakes on external DBaaS
+    idleTimeoutMillis: 5 * 60_000,
+    connectionTimeoutMillis: 10_000,
+    keepAlive: true,
   });
 
   const adapter = new PrismaPg(pool);

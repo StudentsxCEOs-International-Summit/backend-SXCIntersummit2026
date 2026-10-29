@@ -349,6 +349,24 @@ export async function getMyTeam(userId: number) {
       ? 'SEMIFINAL'
       : 'REGISTRATION';
 
+  // The team status is one value that later steps overwrite (PASSED_PRELIMINARY -> PAID), and
+  // `status` below reads PRELIMINARY_SUBMITTED once a deck exists, so the stage is derived here.
+  const semifinalSubmission = team.submissionTeam.find((s) => s.stage === 'SEMIFINAL');
+  const preliminaryResult =
+    statusCode === 'PASSED_PRELIMINARY'
+      ? 'PASSED'
+      : statusCode === 'FAILED_PRELIMINARY'
+        ? 'FAILED'
+        : null;
+  // Payment (Rp 180.000) belongs to the semifinal, so it only opens for teams that passed the
+  // preliminary. PAID/REJECTED_PAYMENT imply they got there.
+  const semifinalEligible =
+    statusCode === 'PASSED_PRELIMINARY' ||
+    statusCode === 'QUALIFIED_SEMIFINAL' ||
+    isQualified ||
+    ((statusCode === 'PAID' || statusCode === 'REJECTED_PAYMENT') && Boolean(preliminarySubmission)) ||
+    Boolean(semifinalSubmission);
+
   const paymentFile = paymentSubmission?.Files?.[0];
   const pendingFileCount = team.submissionTeam
     .flatMap((s) => s.Files)
@@ -370,6 +388,12 @@ export async function getMyTeam(userId: number) {
     status: preliminarySubmission ? 'PRELIMINARY_SUBMITTED' : statusCode,
     isLeader,
     competitionStage,
+    preliminaryResult,
+    semifinal: {
+      eligible: semifinalEligible,
+      submitted: Boolean(semifinalSubmission),
+      submittedAt: semifinalSubmission?.submittedAt || null,
+    },
     payment: {
       status: paymentStatus,
       isUploaded: Boolean(paymentSubmission),
