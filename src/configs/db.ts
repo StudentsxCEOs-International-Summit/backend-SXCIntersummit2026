@@ -9,21 +9,21 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient(): PrismaClient {
+  const isProduction = env.NODE_ENV === "production";
+
   const pool = new Pool({
-    connectionString: env.DIRECT_URL || env.DATABASE_URL,
-    max: 10,
-    // pg closes idle connections after 10s by default, so the first request after a quiet moment
-    // pays for a new TLS connection to the database. Keep them for 5 minutes instead.
+    connectionString: env.DATABASE_URL,
+    max: isProduction ? 10 : 5,
     idleTimeoutMillis: 5 * 60_000,
-    connectionTimeoutMillis: 15_000,
+    connectionTimeoutMillis: 10_000,
     keepAlive: true,
-  })
-  const adapter = new PrismaPg(pool)
+  });
+
+  const adapter = new PrismaPg(pool);
 
   return new PrismaClient({
     adapter,
-    log:
-      env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
+    log: isProduction ? ["error"] : ["query", "error", "warn"],
   });
 }
 
