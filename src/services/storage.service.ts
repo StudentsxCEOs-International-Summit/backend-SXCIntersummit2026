@@ -5,6 +5,9 @@ import crypto from "crypto";
 import { Readable } from "stream";
 import { google } from "googleapis";
 import { env } from "../configs/env";
+import { createChildLogger } from "../configs/logger";
+
+const storageLogger = createChildLogger("STORAGE");
 
 export interface UploadGdriveResult {
   fileId: string;
@@ -203,7 +206,7 @@ export async function uploadBufferToDrive(
       supportsAllDrives: true,
     });
   } catch (err: any) {
-    console.warn(`[GDRIVE] Warning setting reader permission for ${fileId}:`, err.message);
+    storageLogger.warn({ err, fileId }, "Could not set reader permission on Drive file");
   }
 
   return {
@@ -353,7 +356,7 @@ export function deleteFile(filePath: string) {
 
   if (fs.existsSync(absolute)) {
     fs.unlink(absolute, (err) => {
-      if (err) console.warn(`[STORAGE] Could not delete ${absolute}:`, err.message);
+      if (err) storageLogger.warn({ err, filePath: absolute }, "Could not delete local file");
     });
   }
 }

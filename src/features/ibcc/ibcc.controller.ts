@@ -1,4 +1,7 @@
 import { Request, Response } from 'express';
+import { createChildLogger } from '../../configs/logger';
+
+const ibccLogger = createChildLogger('IBCC');
 import { AuthRequest } from '../../middlewares/auth.middleware';
 import { cleanupUploadFiles } from '../../middlewares/clean-up-files.middleware';
 import { ok, badRequest, conflict, notFound, forbidden, internalError } from '../../utils/response';
@@ -255,7 +258,7 @@ export async function getAdminTeamsHandler(_req: AuthRequest, res: Response) {
     const teams = await getAllTeamsForAdmin();
     return ok(res, teams, 'Teams retrieved successfully.');
   } catch (error: any) {
-    console.error('[IBCC] getAdminTeamsHandler error:', error.message);
+    ibccLogger.error({ err: error, msg: 'getAdminTeamsHandler failed' });
     return internalError(res, 'Failed to retrieve teams.');
   }
 }
@@ -275,7 +278,7 @@ export async function updatePreliminaryStatusHandler(req: AuthRequest, res: Resp
 
     return ok(res, updatedTeam, 'Preliminary status updated successfully.');
   } catch (error: any) {
-    console.error('[IBCC] updatePreliminaryStatusHandler error:', error.message);
+    ibccLogger.error({ err: error, teamId: req.params?.teamId, msg: 'updatePreliminaryStatusHandler failed' });
     if (error.message?.includes('not found')) {
       return notFound(res, error.message);
     }

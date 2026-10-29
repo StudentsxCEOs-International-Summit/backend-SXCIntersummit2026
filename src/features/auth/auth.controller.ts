@@ -1,4 +1,7 @@
 import { Request, Response } from 'express'
+import { createChildLogger } from '../../configs/logger'
+
+const authLogger = createChildLogger('AUTH')
 import { ok, badRequest, unauthorized, internalError } from '../../utils/response'
 import { verifyToken } from '../../utils/jwt'
 import { AuthRequest } from '../../middlewares/auth.middleware'
@@ -21,6 +24,7 @@ export async function register(req: Request, res: Response) {
   try {
     const input: RegisterInput = req.body
     const result = await authService.registerUser(input)
+    authLogger.info({ email: result.email, msg: 'Registration initiated' })
 
     return ok(
       res,
@@ -37,6 +41,7 @@ export async function verifyOtp(req: Request, res: Response) {
   try {
     const input: OtpInput = req.body
     const result = await authService.verifyOtp(input)
+    authLogger.info({ email: input.email, purpose: result.purpose, msg: 'OTP verified successfully' })
 
     if (result.purpose === 'register') {
       res.cookie('token', result.token, authCookieOptions)
@@ -121,6 +126,7 @@ export async function loginUser(req: Request, res: Response) {
   try {
     const input: LoginInput = req.body
     const result = await authService.loginUser(input.email, input.password)
+    authLogger.info({ userId: result.user.id, email: result.user.email, role: result.user.role, msg: 'User login successful' })
 
     res.cookie('token', result.token, authCookieOptions)
 
@@ -141,6 +147,7 @@ export async function loginAdmin(req: Request, res: Response) {
   try {
     const input: LoginInput = req.body
     const result = await authService.loginAdmin(input.email, input.password)
+    authLogger.info({ staffId: result.staff.id, email: result.staff.email, role: result.staff.role, msg: 'Staff login successful' })
 
     res.cookie('token', result.token, authCookieOptions)
 

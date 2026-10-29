@@ -6,6 +6,10 @@
  *  - 0:            try the next member, but keep this one in rotation (e.g. a network blip)
  *  - null:         not the account's fault (bad recipient, corrupt file); rethrow right away
  */
+import { createChildLogger } from '../configs/logger'
+
+const failoverLogger = createChildLogger('FAILOVER')
+
 export type Classify = (error: unknown) => number | null
 
 export class FailoverPool<T extends { name: string }> {
@@ -22,9 +26,7 @@ export class FailoverPool<T extends { name: string }> {
 
   markDown(member: T, ms: number, reason: string) {
     this.downUntil.set(member.name, Date.now() + ms)
-    console.error(
-      `[${this.label}] ${member.name} taken out of rotation for ${Math.round(ms / 60_000)} min: ${reason}`,
-    )
+    failoverLogger.error({ pool: this.label, member: member.name, downDurationMinutes: Math.round(ms / 60_000), reason }, 'Member taken out of rotation')
   }
 
   status(now = Date.now()) {
@@ -56,7 +58,7 @@ export class FailoverPool<T extends { name: string }> {
         lastError = error
         const reason = error instanceof Error ? error.message : String(error)
         if (decision > 0) this.markDown(member, decision, reason)
-        else console.warn(`[${this.label}] ${member.name} failed (${reason}); trying the next account.`)
+        else failoverLogger.warn({ pool: this.label, member: member.name, reason }, 'Member failed, attempting next account')
       }
     }
     throw lastError

@@ -1,4 +1,7 @@
 import crypto from 'crypto'
+import { createChildLogger } from '../../configs/logger'
+
+const authLogger = createChildLogger('AUTH')
 import prisma from '../../configs/db'
 import { env } from '../../configs/env'
 import { hashPassword, comparePassword } from '../../utils/bcrypt'
@@ -349,7 +352,7 @@ export async function isTokenBlacklisted(token: string): Promise<boolean> {
     await refreshRevokedTokens()
   } else if (Date.now() - revokedLoadedAt > REVOKED_REFRESH_MS) {
     // Stale: refresh in the background and answer from what is already loaded.
-    refreshRevokedTokens().catch((error) => console.error('[AUTH] Blacklist refresh failed:', error))
+    refreshRevokedTokens().catch((error) => authLogger.error({ err: error, msg: 'Blacklist refresh failed' }))
   }
 
   const exp = revokedTokens.get(token)
