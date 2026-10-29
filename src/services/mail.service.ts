@@ -1,6 +1,9 @@
 import nodemailer from "nodemailer";
 import { env } from "../configs/env";
 import { FailoverPool, HOUR } from "../utils/failover";
+import { createChildLogger } from "../configs/logger";
+
+const mailLogger = createChildLogger("MAIL");
 
 export interface SendMailOptions {
   to: string;
@@ -66,9 +69,7 @@ function getSenders(): MailSender[] {
     }));
 
   if (senders.length === 0) {
-    console.warn(
-      "[MAIL SERVICE] SMTP_USER or SMTP_PASS not set in environment. Running in mock console mode.",
-    );
+    mailLogger.warn("SMTP_USER or SMTP_PASS not set in environment. Running in mock console mode.");
   }
   senderPool = new FailoverPool(senders, "MAIL");
   return senders;
@@ -119,18 +120,10 @@ export async function sendMail(
 
   if (all.length === 0) {
     const fromAddress = env.SMTP_FROM || DEFAULT_FROM;
-    console.log("[MOCK EMAIL ENGINE] Sending email:");
-    console.log(`To      : ${options.to}`);
-    console.log(`From    : ${fromAddress}`);
-    console.log(`Subject : ${options.subject}`);
-    console.log(`Body    : ${options.text || options.html}`);
-    if (options.attachments && options.attachments.length > 0) {
-      console.log(
-        `Attachments: ${options.attachments
-          .map((a: any) => a.filename || a.cid)
-          .join(", ")}`,
-      );
-    }
+    mailLogger.info(
+      { to: options.to, from: fromAddress, subject: options.subject, hasAttachments: Boolean(options.attachments && options.attachments.length > 0) },
+      "Mock email dispatched",
+    );
     return { success: true, messageId: "mock-email-id" };
   }
 
@@ -152,15 +145,10 @@ export async function sendMail(
     );
 
     sender.sentAt.push(Date.now());
-    console.log(
-      `[MAIL SERVICE] Email sent successfully to ${options.to} via ${sender.name} (MessageId: ${info.messageId})`,
-    );
+    mailLogger.info({ to: options.to, sender: sender.name, messageId: info.messageId }, "Email sent successfully");
     return { success: true, messageId: info.messageId };
   } catch (error: any) {
-    console.error(
-      `[MAIL SERVICE] Failed to send email to ${options.to}:`,
-      error.message,
-    );
+    mailLogger.error({ err: error, to: options.to }, "Failed to send email");
     throw new Error(`Failed to send email: ${error.message}`);
   }
 }
