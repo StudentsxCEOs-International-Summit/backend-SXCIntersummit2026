@@ -1,6 +1,9 @@
 import prisma from '../../configs/db'
 import { env } from '../../configs/env'
 import { sendMail } from '../../services/mail.service'
+import { createChildLogger } from '../../configs/logger'
+
+const contactLogger = createChildLogger('CONTACT')
 import type { CreateContactInput, ListContactQuery } from './contact.schema'
 
 const escapeHtml = (value: string) =>
@@ -30,7 +33,7 @@ export async function createContactMessage(input: CreateContactInput) {
         <p>You can also read it in the admin console under Messages.</p>
       `,
       text: `${input.name} (${input.organization}, ${input.email}) - ${input.type}\n\n${input.message}`,
-    }).catch((error) => console.error('[CONTACT] Notification email failed:', error.message))
+    }).catch((error) => contactLogger.error({ err: error }, 'Notification email failed'))
   }
 
   return saved

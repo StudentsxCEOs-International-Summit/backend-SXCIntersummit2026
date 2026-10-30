@@ -1,9 +1,23 @@
-import rateLimit from 'express-rate-limit'
+import rateLimit, { Options } from 'express-rate-limit'
 import { env } from '../configs/env'
+import { createChildLogger } from '../configs/logger'
+
+const rateLimitLogger = createChildLogger('RATE_LIMIT')
 
 const skipCron = (req: { headers: Record<string, unknown> }) => {
   const secret = req.headers['x-cron-secret']
   return Boolean(secret && env.CRON_SECRET && secret === env.CRON_SECRET)
+}
+
+const createRateLimitHandler = (limiter: string) => (req: any, res: any, _next: any, options: Options) => {
+  rateLimitLogger.warn({
+    ip: req.ip,
+    path: req.originalUrl,
+    method: req.method,
+    limiter,
+    msg: 'Rate limit quota exceeded for client connection',
+  })
+  res.status(options.statusCode).send(options.message)
 }
 
 /**
@@ -18,6 +32,7 @@ export const apiRateLimiter = rateLimit({
   legacyHeaders: false,
   validate: { trustProxy: false },
   skip: skipCron,
+  handler: createRateLimitHandler('apiRateLimiter'),
   message: {
     success: false,
     message: 'Too many requests, please try again later.',
@@ -32,6 +47,7 @@ export const authRateLimiter = rateLimit({
   legacyHeaders: false,
   validate: { trustProxy: false },
   skip: skipCron,
+  handler: createRateLimitHandler('authRateLimiter'),
   message: {
     success: false,
     message: 'Too many attempts, please try again in a few minutes.',
@@ -46,6 +62,7 @@ export const contactRateLimiter = rateLimit({
   legacyHeaders: false,
   validate: { trustProxy: false },
   skip: skipCron,
+  handler: createRateLimitHandler('contactRateLimiter'),
   message: {
     success: false,
     message: 'Too many messages from this connection. Please try again later.',

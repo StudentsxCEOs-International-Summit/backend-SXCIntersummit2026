@@ -12,6 +12,7 @@ import {
   isConnectionMessage,
 } from '../utils/response'
 import { env } from '../configs/env'
+import { logger } from '../configs/logger'
 
 // Prisma codes for "database unreachable / timed out / connection dropped / pool exhausted".
 const DB_CONNECTION_CODES = new Set(['P1001', 'P1002', 'P1008', 'P1017', 'P2024'])
@@ -39,8 +40,16 @@ function uploadMessage(err: MulterError): string {
   return 'We could not process your upload. Please check your files and try again.'
 }
 
-/** Technical detail is only echoed outside production, to help while developing. */
-const debugDetails = (err: unknown) => (env.NODE_ENV === 'production' ? undefined : err instanceof Error ? err.message : err)
+/**
+ * What goes into a response's `errors` for a server-side failure: the request id so the team can find
+ * the log line, plus the technical detail only outside production (`fail` drops it there anyway).
+ */
+const serverErrorInfo = (reqId: string, err?: unknown) => ({
+  reqId,
+  ...(env.NODE_ENV !== 'production' && err !== undefined
+    ? { detail: err instanceof Error ? err.message : err }
+    : {}),
+})
 
 export class AppError extends Error {
   statusCode: number
@@ -55,67 +64,83 @@ export class AppError extends Error {
 
 export function errorHandler(
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction,
 ) {
+  const reqId = (req as any).id || (req.headers['x-request-id'] as string) || 'unknown'
+
   if (err instanceof ZodError) {
+    logger.warn({ context: 'VALIDATION', reqId, issues: err.issues, msg: 'Request input validation failed' })
     return badRequest(res, 'Validation error', err.issues)
   }
 
   if (isConnectionError(err)) {
-    console.error('[Connection Error]', err instanceof Error ? err.message : err)
-    return fail(res, FRIENDLY_UNAVAILABLE, 503, debugDetails(err))
+    logger.error({ context: 'CONNECTION', reqId, err, msg: 'Database or network connection problem' })
+    return fail(res, FRIENDLY_UNAVAILABLE, 503, serverErrorInfo(reqId, err))
   }
 
   if (err instanceof AppError) {
-    const details = (env.NODE_ENV === 'production' && err.statusCode >= 500) ? undefined : err.details
-    return fail(res, err.message, err.statusCode, details)
+    if (err.statusCode >= 500) {
+      logger.error({ context: 'APP_ERROR', reqId, err, msg: err.message })
+      return fail(res, FRIENDLY_SERVER_ERROR, err.statusCode, serverErrorInfo(reqId, err))
+    }
+    logger.warn({ context: 'APP_ERROR', reqId, statusCode: err.statusCode, msg: err.message })
+    return fail(res, err.message, err.statusCode, err.details)
   }
 
   if (err instanceof MulterError) {
-    console.error('[Upload Error]', err.code, err.message)
-    return badRequest(res, uploadMessage(err), debugDetails(err))
+    logger.warn({ context: 'UPLOAD', reqId, err, msg: err.message })
+    return badRequest(res, uploadMessage(err))
   }
 
   // Malformed or oversized request bodies are rejected by the body parser before any route runs.
   const httpStatus = (err as { status?: unknown } | null)?.status
   if (typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500) {
-    console.error('[Request Error]', httpStatus, err instanceof Error ? err.message : err)
+    logger.warn({ context: 'REQUEST', reqId, err, statusCode: httpStatus, msg: 'Request could not be read' })
     return fail(
       res,
       httpStatus === 413
         ? 'The data you sent is too large. Please reduce it and try again.'
         : 'We could not read your request. Please refresh the page and try again.',
       httpStatus,
-      debugDetails(err),
     )
   }
 
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    console.error('[Prisma Error]', err.code, JSON.stringify(err.meta))
+    logger.error({
+      context: 'DB',
+      reqId,
+      code: err.code,
+      meta: err.meta,
+      err,
+      msg: 'Prisma database request error',
+    })
+
     if (err.code === 'P2002') {
       return conflict(res, 'A record with that value already exists')
     }
     if (err.code === 'P2025') {
-      return notFound(res, 'Record not found')
+      return notFound(res, 'Requested record not found')
     }
     if (err.code === 'P2003') {
       return badRequest(res, 'Invalid reference: related record not found')
     }
-    return fail(res, FRIENDLY_SERVER_ERROR, 500, env.NODE_ENV === 'production' ? undefined : { code: err.code, meta: err.meta })
+
+    // Zero internal database leaks in production (OWASP CWE-209)
+    return fail(res, FRIENDLY_SERVER_ERROR, 500, serverErrorInfo(reqId, { code: err.code, meta: err.meta }))
   }
 
   if (err instanceof Prisma.PrismaClientValidationError) {
-    console.error('[Prisma Validation]', err.message)
-    return fail(res, FRIENDLY_SERVER_ERROR, 500, debugDetails(err))
+    logger.error({ context: 'DB', reqId, err, msg: 'Prisma schema validation error' })
+    return fail(res, FRIENDLY_SERVER_ERROR, 500, serverErrorInfo(reqId, err))
   }
 
   if (err instanceof Error) {
-    console.error('[Unhandled]', err.stack)
-    return fail(res, FRIENDLY_SERVER_ERROR, 500, debugDetails(err))
+    logger.error({ context: 'UNHANDLED', reqId, err, stack: err.stack, msg: err.message })
+    return fail(res, FRIENDLY_SERVER_ERROR, 500, serverErrorInfo(reqId, err))
   }
 
-  console.error('[Unhandled error]', err)
-  return fail(res, FRIENDLY_SERVER_ERROR, 500)
+  logger.error({ context: 'UNHANDLED', reqId, err, msg: 'Unknown exception' })
+  return fail(res, FRIENDLY_SERVER_ERROR, 500, serverErrorInfo(reqId))
 }

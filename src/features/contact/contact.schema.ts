@@ -13,7 +13,12 @@ export const contactStatuses = ['NEW', 'READ', 'ARCHIVED'] as const
 export const createContactSchema = z.object({
   name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100),
   organization: z.string().trim().min(2, 'Organization must be at least 2 characters').max(150),
-  email: z.email('Invalid email address').max(150),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .max(150)
+    .pipe(z.email('Please enter a valid email address')),
   type: z.enum(contactTypes, { message: 'Choose what you are interested in' }),
   message: z.string().trim().min(10, 'Message must be at least 10 characters').max(2000),
   // Honeypot: real visitors never see or fill this field, bots usually do.

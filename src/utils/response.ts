@@ -40,6 +40,9 @@ const SESSION_MESSAGE = /\bjwt\b|invalid signature|TokenExpiredError|JsonWebToke
 const TECHNICAL_MESSAGE =
   /prisma|invocation|ERR_[A-Z_]+|Unique constraint|Foreign key|ECONN|ETIMEDOUT|\bselect\b.+\bfrom\b|\binsert into\b|relation ".+" does not exist|column .+ does not exist|Cannot read propert|is not a function|is not defined|Unexpected token|\b(Type|Reference|Syntax)Error\b|Failed to send email|SMTP|EAUTH|ESOCKET|Invalid login|gaxios|invalid_grant|googleapis|node_modules|not configured|is not set|Google Drive|Drive account|folder ID|Local copy|no account is available|[A-Za-z]:\x5c|\.(ts|js):\d+|\n\s+at /i
 
+// Bare "something failed" texts carry no help for a visitor, so they get the friendly message too.
+const GENERIC_SERVER_MESSAGE = /^(internal server error|database operation failed)$/i
+
 export const isConnectionMessage = (message: string) => CONNECTION_MESSAGE.test(message)
 
 /**
@@ -68,7 +71,7 @@ export function fail(
     finalMessage = FRIENDLY_UNAVAILABLE
     finalStatus = 503
     sanitized = true
-  } else if (TECHNICAL_MESSAGE.test(message) || message === 'internal server error') {
+  } else if (TECHNICAL_MESSAGE.test(message) || GENERIC_SERVER_MESSAGE.test(message)) {
     console.error('[Server Error]', message)
     finalMessage = FRIENDLY_SERVER_ERROR
     finalStatus = 500
@@ -76,8 +79,10 @@ export function fail(
   }
 
   // Technical detail is only echoed while developing; production never sends it.
+  // The one thing that stays in production is the request id, so the team can find the log line.
   if (process.env.NODE_ENV === 'production' && (sanitized || finalStatus >= 500)) {
-    finalErrors = undefined
+    const reqId = (finalErrors as { reqId?: unknown } | null | undefined)?.reqId
+    finalErrors = typeof reqId === 'string' ? { reqId } : undefined
   }
 
   const payload: ApiError = { success: false, message: finalMessage, errors: finalErrors }

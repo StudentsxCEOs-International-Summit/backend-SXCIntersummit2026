@@ -1,10 +1,12 @@
 import express from 'express'
 import cors from 'cors'
-import morgan from 'morgan'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import swaggerUi from 'swagger-ui-express'
+import pinoHttp from 'pino-http'
+import crypto from 'crypto'
 import { env } from './configs/env'
+import { logger } from './configs/logger'
 import { errorHandler } from './middlewares/error.middleware'
 import { notFound } from './middlewares/not-found.middleware'
 import { apiRateLimiter } from './middlewares/rate-limiter.middleware'
@@ -45,7 +47,20 @@ app.use(
 app.use(cookieParser())
 app.use(express.json({ limit: '2mb' }))
 app.use(express.urlencoded({ extended: true }))
-app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'))
+
+app.use(
+  pinoHttp({
+    logger,
+    genReqId: (req) => (req.headers['x-request-id'] as string) || crypto.randomUUID(),
+    customLogLevel: (_req, res, err) => {
+      if (res.statusCode >= 500 || err) return 'error'
+      if (res.statusCode >= 400) return 'warn'
+      return 'info'
+    },
+    customSuccessMessage: (req, res) => `${req.method} ${req.url} completed with ${res.statusCode}`,
+    customErrorMessage: (req, _res, err) => `${req.method} ${req.url} failed: ${err.message}`,
+  }),
+)
 
 // Uploaded files (ID cards, payment proofs) live on disk only until they reach Drive; nothing under
 // /uploads is ever served.
@@ -93,12 +108,17 @@ if (env.NODE_ENV !== 'test') {
   startDriveUploadWorker()
 
   const server = app.listen(env.PORT, () => {
-    console.log(`API running at ${env.APP_URL}`)
+    logger.info({
+      context: 'SYSTEM',
+      port: env.PORT,
+      appUrl: env.APP_URL,
+      nodeEnv: env.NODE_ENV,
+      appEnv: env.APP_ENV,
+      msg: `API running at ${env.APP_URL}`,
+    })
     if (docsEnabled) {
-      console.log(`Swagger Docs available at ${env.APP_URL}/api-docs`)
+      logger.info({ context: 'SYSTEM', msg: `Swagger docs available at ${env.APP_URL}/api-docs` })
     }
-    console.log(`NODE_ENV : ${env.NODE_ENV}`)
-    console.log(`APP_ENV  : ${env.APP_ENV}`)
   })
 
   // Node cuts a request that is still arriving after 5 minutes by default; 50 MB over a weak

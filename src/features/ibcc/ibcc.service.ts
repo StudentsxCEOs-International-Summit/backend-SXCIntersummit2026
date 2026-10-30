@@ -1,4 +1,7 @@
 import crypto from 'crypto';
+import { createChildLogger } from '../../configs/logger';
+
+const ibccLogger = createChildLogger('IBCC');
 import prisma from '../../configs/db';
 import { hashPassword } from '../../utils/bcrypt';
 import { sendMail } from '../../services/mail.service';
@@ -248,7 +251,7 @@ export async function registerTeam(
     subject: `Registration Confirmed - Team ${result.team.name} [${result.teamCode}] | IBCC 2026`,
     html: leaderEmailHtml,
   }).catch((err) => {
-    console.error(`[IBCC] Leader confirmation email error: ${err.message}`);
+    ibccLogger.error({ err, leaderEmail: leaderUser.email, msg: 'Leader confirmation email failed' });
   });
 
   return {
@@ -747,7 +750,7 @@ export async function publishResults(qualifiedTeamIds: number[]) {
   });
 
   sendSemifinalResultEmails(qualifiedTeamIds, eliminatedTeamIds).catch((err) =>
-    console.error('[SEMIFINAL] Email sending error:', err),
+    ibccLogger.error({ err, msg: 'Semifinal result email dispatch error' }),
   );
 
   return {

@@ -2,6 +2,9 @@ import cron from "node-cron";
 import prisma from "../configs/db";
 import { sendMail, renderEmailTemplate } from "../services/mail.service";
 import { getAppConfig, isRegistrationOpen, getEffectiveDeadline } from "../configs/appConfig";
+import { createChildLogger } from "../configs/logger";
+
+const schedulerLogger = createChildLogger("SCHEDULER");
 
 /**
  * Email Scheduler Job
@@ -15,17 +18,17 @@ import { getAppConfig, isRegistrationOpen, getEffectiveDeadline } from "../confi
 export function startEmailSchedulerJob() {
   // Runs daily at 09:00 WIB (UTC+7) → 02:00 UTC
   cron.schedule("0 2 * * *", async () => {
-    console.log("[EMAIL SCHEDULER] Running scheduled email tasks...");
+    schedulerLogger.info("Running scheduled email tasks");
 
     try {
       await sendDeadlineReminders();
       await sendPaymentReminders();
     } catch (error: any) {
-      console.error("[EMAIL SCHEDULER] Job error:", error.message);
+      schedulerLogger.error({ err: error }, "Scheduled email job error");
     }
   });
 
-  console.log("[EMAIL SCHEDULER] Email scheduler job started (daily at 09:00 WIB).");
+  schedulerLogger.info("Email scheduler job started (daily at 02:00 UTC)");
 }
 
 /**
@@ -87,12 +90,12 @@ async function sendDeadlineReminders(): Promise<number> {
 
       sent++;
     } catch (err: any) {
-      console.error(`[EMAIL SCHEDULER] Deadline reminder to ${team.leader.email} failed:`, err.message);
+      schedulerLogger.error({ err, leaderEmail: team.leader.email }, "Deadline reminder email failed");
     }
   }
 
   if (sent > 0) {
-    console.log(`[EMAIL SCHEDULER] Sent ${sent} deadline reminder email(s).`);
+    schedulerLogger.info({ sentCount: sent }, "Dispatched deadline reminder emails");
   }
   return sent;
 }
@@ -162,12 +165,12 @@ async function sendPaymentReminders(): Promise<number> {
 
       sent++;
     } catch (err: any) {
-      console.error(`[EMAIL SCHEDULER] Payment reminder to ${team.leader.email} failed:`, err.message);
+      schedulerLogger.error({ err, leaderEmail: team.leader.email }, "Payment reminder email failed");
     }
   }
 
   if (sent > 0) {
-    console.log(`[EMAIL SCHEDULER] Sent ${sent} payment reminder email(s).`);
+    schedulerLogger.info({ sentCount: sent }, "Dispatched payment reminder emails");
   }
   return sent;
 }

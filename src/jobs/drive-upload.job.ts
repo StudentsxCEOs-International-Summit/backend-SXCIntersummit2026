@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import prisma from '../configs/db'
+import { createChildLogger } from '../configs/logger'
 import {
   PENDING_PREFIX,
   PENDING_UPLOAD_DIR,
@@ -21,6 +22,7 @@ import { FailoverPool, HOUR, MINUTE } from '../utils/failover'
  * upload to the backup account instead of letting files pile up.
  */
 
+const driveLogger = createChildLogger('DRIVE')
 const CONCURRENCY = 2
 const SWEEP_INTERVAL_MS = 30_000
 const SWEEP_BATCH = 200
@@ -184,7 +186,7 @@ async function processFile(id: number) {
   )
 
   if (teamCode) teamAccount.set(teamCode, account)
-  if (account !== 1) console.warn(`[DRIVE QUEUE] File ${id} was stored in backup Drive account ${account}.`)
+  if (account !== 1) driveLogger.warn({ fileId: id, account }, 'Stored file in backup Drive account')
 
   await prisma.submissionFile.update({
     where: { id },
@@ -227,9 +229,9 @@ function pump() {
         const attempts = (retryState.get(id)?.attempts ?? 0) + 1
         const delay = Math.min(15_000 * 2 ** (attempts - 1), MAX_BACKOFF_MS)
         retryState.set(id, { attempts, notBefore: Date.now() + delay })
-        console.error(
-          `[DRIVE QUEUE] File ${id} failed (attempt ${attempts}), retry in ${Math.round(delay / 1000)}s: ${error.message}` +
-            (attempts >= 5 ? ' (REPEATED FAILURE: check Drive credentials)' : ''),
+        driveLogger.error(
+          { err: error, fileId: id, attempts, delayMs: delay, repeatedFailure: attempts >= 5 },
+          'File upload failed, scheduling retry',
         )
       })
       .finally(() => {
@@ -257,10 +259,7 @@ function warnAboutBacklog(count: number, oldest: Date | undefined, now: number) 
   if (count < BACKLOG_COUNT && ageMs < BACKLOG_AGE_MS) return
 
   lastBacklogWarning = now
-  console.warn(
-    `[DRIVE QUEUE] BACKLOG: ${count} file(s) still waiting for Google Drive, oldest for ${Math.round(ageMs / 60_000)} min. ` +
-      `Check the Drive token and disk space (uploads/pending).`,
-  )
+  driveLogger.warn({ count, ageMinutes: Math.round(ageMs / 60_000) }, 'Drive upload backlog detected; check token and pending disk space')
 }
 
 async function sweepPending() {
@@ -278,7 +277,7 @@ async function sweepPending() {
       if ((retryState.get(id)?.notBefore ?? 0) <= now) enqueueDriveUpload(id)
     }
   } catch (error) {
-    console.error('[DRIVE QUEUE] Sweep failed:', error)
+    driveLogger.error({ err: error }, 'Drive pending sweep failed')
   }
 }
 
