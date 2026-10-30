@@ -166,7 +166,11 @@ export async function submitSemifinalHandler(req: AuthRequest, res: Response) {
       deleteFile(req.file.path);
     }
     const message = error.message || 'Failed to submit semifinal slide deck.';
-    if (message.includes('not the leader') || message.includes('not found')) {
+    if (
+      message.includes('not the leader') ||
+      message.includes('not found') ||
+      message.includes('advanced to the semifinal')
+    ) {
       return forbidden(res, message);
     }
     return internalError(res, message);
@@ -194,7 +198,11 @@ export async function submitPaymentHandler(req: AuthRequest, res: Response) {
       deleteFile(req.file.path);
     }
     const message = error.message || 'Failed to submit payment proof.';
-    if (message.includes('not the leader') || message.includes('not found')) {
+    if (
+      message.includes('not the leader') ||
+      message.includes('not found') ||
+      message.includes('advanced to the semifinal')
+    ) {
       return forbidden(res, message);
     }
     return internalError(res, message);

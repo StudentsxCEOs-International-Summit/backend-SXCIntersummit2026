@@ -123,6 +123,7 @@ export async function registerTeam(
       data: {
         wa_number: input.leaderInfo.whatsapp,
         institution_name: input.leaderInfo.institution,
+        major: input.leaderInfo.major,
       },
     });
 
@@ -144,6 +145,7 @@ export async function registerTeam(
         userId: leaderUser.id,
         role: 'LEADER',
         institution: input.leaderInfo.institution,
+        major: input.leaderInfo.major,
         yearOfStudy: input.leaderInfo.yearOfStudy,
       },
     });
@@ -162,6 +164,7 @@ export async function registerTeam(
             role: 'USER',
             wa_number: memberInput.whatsapp,
             institution_name: memberInput.institution,
+            major: memberInput.major,
           },
         });
       }
@@ -172,6 +175,7 @@ export async function registerTeam(
           userId: targetUser.id,
           role: 'MEMBER',
           institution: memberInput.institution,
+          major: memberInput.major,
           yearOfStudy: memberInput.yearOfStudy,
         },
       });
@@ -263,6 +267,41 @@ export async function registerTeam(
 const isPendingFile = (file: { gdriveId: string | null; filePath: string }) =>
   !file.gdriveId && file.filePath.startsWith(PENDING_PREFIX);
 
+/**
+ * Payment and the semifinal deck only open once the team has advanced to the semifinal. The same rule
+ * drives the "My Team" page and guards the upload endpoints, so the UI and the API can't disagree.
+ */
+function isSemifinalEligible(statusCode: string, hasPreliminarySubmission: boolean, hasSemifinalSubmission: boolean) {
+  return (
+    statusCode === 'PASSED_PRELIMINARY' ||
+    statusCode === 'QUALIFIED_SEMIFINAL' ||
+    statusCode === 'QUALIFIED_FINAL' ||
+    ((statusCode === 'PAID' || statusCode === 'REJECTED_PAYMENT') && hasPreliminarySubmission) ||
+    hasSemifinalSubmission
+  );
+}
+
+async function assertSemifinalEligible(teamId: number) {
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    include: {
+      statuscode: true,
+      submissionTeam: { select: { stage: true, type: true } },
+    },
+  });
+  const eligible =
+    team &&
+    isSemifinalEligible(
+      team.statuscode?.code || 'PENDING_PAYMENT',
+      team.submissionTeam.some((s) => s.stage === 'PREELIM' && s.type === 'TASK'),
+      team.submissionTeam.some((s) => s.stage === 'SEMIFINAL'),
+    );
+  if (!eligible) {
+    throw new Error('This step opens once your team has advanced to the semifinal.');
+  }
+  return team;
+}
+
 export async function getMyTeam(userId: number) {
   // Single query joins all related models to eliminate N+1 roundtrips.
   const team = await prisma.team.findFirst({
@@ -317,6 +356,7 @@ export async function getMyTeam(userId: number) {
     name: tm.user.name,
     email: tm.user.email,
     institution: tm.institution,
+    major: tm.major,
     yearOfStudy: tm.yearOfStudy,
   }));
 
@@ -360,12 +400,11 @@ export async function getMyTeam(userId: number) {
         : null;
   // Payment (Rp 180.000) belongs to the semifinal, so it only opens for teams that passed the
   // preliminary. PAID/REJECTED_PAYMENT imply they got there.
-  const semifinalEligible =
-    statusCode === 'PASSED_PRELIMINARY' ||
-    statusCode === 'QUALIFIED_SEMIFINAL' ||
-    isQualified ||
-    ((statusCode === 'PAID' || statusCode === 'REJECTED_PAYMENT') && Boolean(preliminarySubmission)) ||
-    Boolean(semifinalSubmission);
+  const semifinalEligible = isSemifinalEligible(
+    statusCode,
+    Boolean(preliminarySubmission),
+    Boolean(semifinalSubmission),
+  );
 
   const paymentFile = paymentSubmission?.Files?.[0];
   const pendingFileCount = team.submissionTeam
@@ -397,7 +436,6 @@ export async function getMyTeam(userId: number) {
     payment: {
       status: paymentStatus,
       isUploaded: Boolean(paymentSubmission),
-      fileUrl: paymentFile && !isPendingFile(paymentFile) ? paymentFile.filePath : null,
       isProcessing: Boolean(paymentFile && isPendingFile(paymentFile)),
       submittedAt: paymentSubmission?.submittedAt || null,
     },
@@ -411,6 +449,7 @@ export async function getMyTeam(userId: number) {
       name: team.leader.name,
       email: team.leader.email,
       institution: team.leader.institution_name,
+      major: team.leader.major,
     },
     members: nonLeaderMembers,
     submissions: {
@@ -496,6 +535,8 @@ export async function submitSemifinalSlideDeck(
     throw new Error('You are not the leader of an active IBCC team or team was not found.');
   }
 
+  await assertSemifinalEligible(team.id);
+
   // The SlideDeck row is created by the Drive worker once the link exists.
   const submission = await prisma.submission.create({
     data: {
@@ -546,6 +587,11 @@ export async function submitPaymentProof(
 
   if (!team) {
     throw new Error('You are not the leader of an active IBCC team or team was not found.');
+  }
+
+  const eligibleTeam = await assertSemifinalEligible(team.id);
+  if (eligibleTeam.statuscode?.code === 'PAID') {
+    throw new Error('This step opens once your team has advanced to the semifinal. Your payment is already verified.');
   }
 
   const submission = await prisma.submission.create({

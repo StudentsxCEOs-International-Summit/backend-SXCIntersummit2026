@@ -319,6 +319,7 @@ model TeamMember {
   userId      Int
   role        teamrole
   institution String?
+  major       String?
   yearOfStudy String?
 
   team Team @relation(fields: [teamId], references: [id])

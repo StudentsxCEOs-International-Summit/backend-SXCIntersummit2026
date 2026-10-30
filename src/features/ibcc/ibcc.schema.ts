@@ -37,13 +37,15 @@ export const memberItemSchema = z.object({
   fullName: z.string().min(2, 'Full name is required'),
   email: z.email('Invalid email address'),
   whatsapp: z.string().min(8, 'Valid WhatsApp number is required'),
-  institution: z.string().min(3, 'Institution and Major are required'),
+  institution: z.string().trim().min(3, 'Institution is required'),
+  major: z.string().trim().min(2, 'Major is required'),
   yearOfStudy: yearOfStudyEnum,
 });
 
 export const leaderInfoSchema = z.object({
   whatsapp: z.string().min(8, 'Valid WhatsApp number is required'),
-  institution: z.string().min(3, 'Institution and Major are required'),
+  institution: z.string().trim().min(3, 'Institution is required'),
+  major: z.string().trim().min(2, 'Major is required'),
   yearOfStudy: yearOfStudyEnum,
 });
 

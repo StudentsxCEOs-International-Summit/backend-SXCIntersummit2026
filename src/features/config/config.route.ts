@@ -184,9 +184,9 @@ configRouter.post(
   },
 );
 
-// POST /config/trigger-emails — admin or cronjob.org webhook
+// POST /config/trigger-emails — admin or cronjob.org webhook (send the x-cron-secret header)
 // For cronjob.org, configure it to POST to: {APP_URL}/api/config/trigger-emails
-configRouter.post("/trigger-emails", async (_req: Request, res: Response) => {
+configRouter.post("/trigger-emails", authorizeConfigUpdate, async (_req: Request, res: Response) => {
   try {
     const result = await triggerEmailScheduler();
     return ok(res, result, "Email scheduler triggered manually.");

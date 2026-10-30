@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
-import { ok, badRequest, unauthorized, internalError } from '../../utils/response'
+import { ok, badRequest, unauthorized, forbidden, internalError } from '../../utils/response'
+import { env } from '../../configs/env'
 import { verifyToken } from '../../utils/jwt'
 import { AuthRequest } from '../../middlewares/auth.middleware'
 import { authCookieOptions, clearCookieOptions } from '../../configs/cookie'
@@ -205,6 +206,30 @@ export function googleDriveSetupRedirect(_req: Request, res: Response) {
   return res.redirect(url)
 }
 
+/** Only our own frontend origins (CORS_ORIGIN) may be a post-login redirect target; anything else is refused. */
+function safeFrontendRedirect(target: string): string | null {
+  try {
+    const url = new URL(target)
+    const allowed = (env.CORS_ORIGIN ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+    return allowed.includes(url.origin) ? url.toString() : null
+  } catch {
+    return null
+  }
+}
+
+/** True when the request carries a valid staff session cookie (needed for the one-off Drive setup page). */
+function hasStaffSession(req: Request): boolean {
+  try {
+    const token = req.cookies?.token
+    return Boolean(token) && verifyToken(token)?.accountType === 'staff'
+  } catch {
+    return false
+  }
+}
+
 export async function googleAuthCallback(req: Request, res: Response) {
   try {
     const code = req.query.code as string | undefined
@@ -215,6 +240,9 @@ export async function googleAuthCallback(req: Request, res: Response) {
     }
 
     if (state === 'gdrive_setup') {
+      if (!hasStaffSession(req)) {
+        return forbidden(res, 'Forbidden: Admin access required')
+      }
       const { tokens } = await googleOAuthClient.getToken(code)
       if (!tokens.refresh_token) {
         return res.send(`
@@ -244,7 +272,7 @@ export async function googleAuthCallback(req: Request, res: Response) {
             <p>Silakan salin baris di bawah ini dan tempelkan ke file <code>.env</code> kamu:</p>
             <textarea style="width: 100%; height: 90px; font-size: 14px; font-family: monospace; padding: 12px; background: #1e293b; color: #38bdf8; border: 1px solid #334155; border-radius: 8px; box-sizing: border-box;" readonly>GOOGLE_DRIVE_REFRESH_TOKEN=${tokens.refresh_token}</textarea>
             <p style="color: #94a3b8; font-size: 14px; margin-top: 16px;">
-              Akun <b>itsxcintersummit@gmail.com</b> sekarang aktif untuk storage, kuota 15 GB siap digunakan, dan error kuota 0 MB Service Account tidak akan muncul lagi!
+              Akun Google yang baru saja Anda izinkan sekarang aktif untuk storage dan kuota akunnya siap digunakan.
             </p>
           </body>
         </html>
@@ -256,10 +284,13 @@ export async function googleAuthCallback(req: Request, res: Response) {
 
     res.cookie('token', result.token, authCookieOptions)
 
+    // The session already lives in the httpOnly cookie set above, so the token never goes into a URL.
     if (state && typeof state === 'string' && state.startsWith('http')) {
-      const redirectUrl = new URL(state)
-      redirectUrl.searchParams.set('token', result.token)
-      return res.redirect(redirectUrl.toString())
+      const target = safeFrontendRedirect(state)
+      if (!target) {
+        return badRequest(res, 'Invalid redirect address.')
+      }
+      return res.redirect(target)
     }
 
     return ok(

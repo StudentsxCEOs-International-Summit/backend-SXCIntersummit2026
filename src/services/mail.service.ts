@@ -249,7 +249,7 @@ export function renderEmailTemplate({
                 Connect with us:
                 <a href="https://instagram.com/sxcintersummit" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; margin: 0 6px;">Instagram</a> &bull;
                 <a href="https://linkedin.com/company/studentsxceos-international-summit" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; margin: 0 6px;">LinkedIn</a> &bull;
-                <a href="https://tiktok.com/@intersummitsxc" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; margin: 0 6px;">TikTok</a>
+                <a href="https://www.tiktok.com/@intersummitsxc" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; margin: 0 6px;">TikTok</a>
               </p>
               <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #94a3b8;">
                 ${footerNote ? `${footerNote}<br>` : "If you did not initiate this request, you can safely ignore this email.<br>"}

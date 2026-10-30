@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { Readable } from "stream";
 import { google } from "googleapis";
 import { env } from "../configs/env";
+import { AppError } from "../middlewares/error.middleware";
 
 export interface UploadGdriveResult {
   fileId: string;
@@ -282,7 +283,7 @@ function imageFilter(_req: Express.Request, file: Express.Multer.File, cb: multe
   if (ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error(`Only image files are allowed (jpg, png, webp, gif). Received: ${file.mimetype}`));
+    cb(new AppError('This file type is not supported. Please upload a JPG, PNG, WEBP, or GIF image.', 400));
   }
 }
 
@@ -290,7 +291,7 @@ function docFilter(_req: Express.Request, file: Express.Multer.File, cb: multer.
   if (ALLOWED_DOC_TYPES.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error(`Only PDF, PPT/PPTX, and image files are allowed. Received: ${file.mimetype}`));
+    cb(new AppError('This file type is not supported. Please upload a PDF, PPT/PPTX, or image file.', 400));
   }
 }
 

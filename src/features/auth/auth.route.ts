@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { validateRequest } from '../../middlewares/validation.middleware'
-import { requireAuth } from '../../middlewares/auth.middleware'
+import { requireAuth, requireAdmin } from '../../middlewares/auth.middleware'
 import { authRateLimiter } from '../../middlewares/rate-limiter.middleware'
 import * as AuthController from './auth.controller'
 import {
@@ -68,7 +68,7 @@ authRouter.get('/me', requireAuth, AuthController.getMe)
 
 // Google OAuth Endpoints
 authRouter.get('/google', AuthController.googleAuthRedirect)
-authRouter.get('/google/gdrive-setup', AuthController.googleDriveSetupRedirect)
+authRouter.get('/google/gdrive-setup', requireAuth, requireAdmin, AuthController.googleDriveSetupRedirect)
 
 authRouter.get(
   '/google/callback',

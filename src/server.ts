@@ -47,14 +47,17 @@ app.use(express.json({ limit: '2mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 
-// Files waiting for their Drive upload (ID cards, payment proofs) must never be served from here.
-app.use('/uploads/pending', (_req, res) => {
+// Uploaded files (ID cards, payment proofs) live on disk only until they reach Drive; nothing under
+// /uploads is ever served.
+app.use('/uploads', (_req, res) => {
   res.status(404).json({ success: false, message: 'Not found' })
 })
-app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')))
 app.use('/public', express.static(path.resolve(process.cwd(), 'public')))
 
-if (env.NODE_ENV !== 'production') {
+// The API docs only exist on a developer's machine: never in production or on a shared staging server.
+const docsEnabled = env.NODE_ENV !== 'production' && env.APP_ENV === 'local'
+
+if (docsEnabled) {
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions))
   app.get('/api-docs.json', (_req, res) => {
     res.setHeader('Content-Type', 'application/json')
@@ -71,7 +74,7 @@ app.get('/', (_req, res) => {
 
   return res.json({
     message: 'API SXC Intersummit 2026 is running',
-    docs: `${env.APP_URL}/api-docs`,
+    ...(docsEnabled ? { docs: `${env.APP_URL}/api-docs` } : {}),
   })
 })
 
@@ -91,7 +94,7 @@ if (env.NODE_ENV !== 'test') {
 
   const server = app.listen(env.PORT, () => {
     console.log(`API running at ${env.APP_URL}`)
-    if (env.NODE_ENV !== 'production') {
+    if (docsEnabled) {
       console.log(`Swagger Docs available at ${env.APP_URL}/api-docs`)
     }
     console.log(`NODE_ENV : ${env.NODE_ENV}`)

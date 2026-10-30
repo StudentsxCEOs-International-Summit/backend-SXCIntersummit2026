@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import { OAuth2Client } from 'google-auth-library'
 import { env } from '../../configs/env'
 import { badRequest } from '../../utils/response'
+import { escapeHtml } from '../../utils/html'
 
 function getDriveOAuthClient(): OAuth2Client {
   const clientId = env.GOOGLE_DRIVE_CLIENT_ID || env.GOOGLE_CLIENT_ID
@@ -43,7 +44,7 @@ export async function adminDriveCallback(req: Request, res: Response) {
           <head><title>Google Drive Setup Failed</title><meta charset="utf-8"></head>
           <body style="font-family: system-ui, sans-serif; padding: 40px; background: #0f172a; color: #f8fafc; max-width: 650px; margin: 40px auto; border-radius: 12px; border: 1px solid #334155;">
             <h2 style="color: #ef4444; margin-top: 0;">❌ Autorisasi Dibatalkan / Gagal</h2>
-            <p>Error dari Google: <code>${errorParam}</code></p>
+            <p>Error dari Google: <code>${escapeHtml(errorParam)}</code></p>
             <p><a href="/api/admin/drive/setup" style="color: #38bdf8;">Klik di sini untuk mencoba lagi</a></p>
           </body>
         </html>
@@ -91,7 +92,7 @@ export async function adminDriveCallback(req: Request, res: Response) {
 
           <div style="margin-top: 24px; padding: 16px; background: #1e293b; border-radius: 8px; border: 1px solid #334155;">
             <p style="margin: 0; color: #94a3b8; font-size: 14px; line-height: 1.6;">
-              🎉 <b>Akun siap digunakan!</b> Backend sekarang mengunggah file pendaftaran langsung menggunakan kuota 15 GB akun panitia (<b>itsxcintersummit@gmail.com</b>).
+              🎉 <b>Akun siap digunakan!</b> Backend sekarang mengunggah file pendaftaran langsung menggunakan kuota 15 GB akun Google yang baru saja Anda izinkan.
             </p>
           </div>
         </body>
@@ -104,7 +105,7 @@ export async function adminDriveCallback(req: Request, res: Response) {
         <head><title>Google Drive Setup Error</title><meta charset="utf-8"></head>
         <body style="font-family: system-ui, sans-serif; padding: 40px; background: #0f172a; color: #f8fafc; max-width: 650px; margin: 40px auto; border-radius: 12px; border: 1px solid #334155;">
           <h2 style="color: #ef4444; margin-top: 0;">❌ Terjadi Kesalahan</h2>
-          <p>Detail Error: <code>${error.message}</code></p>
+          <p>Detail Error: <code>${escapeHtml(error.message)}</code></p>
           <p><a href="/api/admin/drive/setup" style="color: #38bdf8;">Coba Lagi</a></p>
         </body>
       </html>
