@@ -38,7 +38,7 @@ const envSchema = z
     EMAIL_BANNER_URL: z
       .url()
       .default(
-        `${process.env.APP_URL || "http://localhost:3000"}/public/images/email-banner.png`
+        `${process.env.APP_URL || "http://localhost:3000"}/public/images/email-banner.jpg`
       ),
     EMAIL_HEADER_BANNER_URL: z.url().optional(),
     GOOGLE_CLIENT_ID: z.string().min(1, "GOOGLE_CLIENT_ID is required"),

@@ -10,6 +10,8 @@ export interface SendMailOptions {
   subject: string;
   html: string;
   text?: string;
+  /** Extra mail headers (e.g. marking an automatic message). */
+  headers?: Record<string, string>;
   attachments?: nodemailer.SendMailOptions["attachments"];
 }
 
@@ -24,6 +26,10 @@ interface MailSender {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_FROM = "SXC Intersummit 2026 <no-reply@sxcintersummit.com>";
+const SENDER_NAME = "SXC International Summit";
+
+/** A bare address shows up as just "itsx...@gmail.com"; with a name the inbox shows who it is from. */
+const withSenderName = (from: string) => (from.includes("<") ? from : `"${SENDER_NAME}" <${from}>`);
 
 function createTransport(user: string, pass: string) {
   return nodemailer.createTransport({
@@ -50,12 +56,12 @@ function getSenders(): MailSender[] {
   if (senders) return senders;
 
   const accounts = [
-    { name: "smtp-1", user: env.SMTP_USER, pass: env.SMTP_PASS, from: env.SMTP_FROM || DEFAULT_FROM },
+    { name: "smtp-1", user: env.SMTP_USER, pass: env.SMTP_PASS, from: withSenderName(env.SMTP_FROM || DEFAULT_FROM) },
     {
       name: "smtp-2",
       user: env.SMTP_USER_2,
       pass: env.SMTP_PASS_2,
-      from: env.SMTP_FROM_2 || env.SMTP_USER_2 || DEFAULT_FROM,
+      from: withSenderName(env.SMTP_FROM_2 || env.SMTP_USER_2 || DEFAULT_FROM),
     },
   ];
 
@@ -138,6 +144,7 @@ export async function sendMail(
           subject: options.subject,
           text: options.text,
           html: options.html,
+          headers: options.headers,
           attachments: options.attachments,
         }),
       }),
@@ -300,6 +307,8 @@ export async function sendOtpEmail(
     subject,
     html: htmlContent,
     text: `Your SXC Intersummit 2026 OTP code is: ${otp}. This code is valid for 5 minutes.`,
+    // Marks it as an automatic, one-to-one message (no auto-replies, not a newsletter).
+    headers: { "Auto-Submitted": "auto-generated", "X-Auto-Response-Suppress": "OOF, AutoReply" },
   });
 }
 
