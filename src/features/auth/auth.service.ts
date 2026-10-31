@@ -11,6 +11,16 @@ import { GoogleUserInfo } from '../../services/google-auth.service'
 import { RegisterInput, OtpInput } from './auth.schema'
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000
+const OTP_COOLDOWN_MS = 60 * 1000
+
+function assertOtpCooldown(otpSentAt?: Date | null, action = 'requesting another verification code') {
+  if (!otpSentAt) return
+  const elapsedMs = Date.now() - new Date(otpSentAt).getTime()
+  if (elapsedMs < OTP_COOLDOWN_MS) {
+    const remainingSeconds = Math.ceil((OTP_COOLDOWN_MS - elapsedMs) / 1000)
+    throw new Error(`Please wait ${remainingSeconds} second(s) before ${action}.`)
+  }
+}
 
 export function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
@@ -38,6 +48,13 @@ export async function registerUser(input: RegisterInput) {
   const existingStaff = await findStaffByEmail(email)
   if (existingStaff) {
     throw new Error('Email is already registered as staff')
+  }
+
+  const pending = await prisma.pendingUserVerification.findUnique({
+    where: { email },
+  })
+  if (pending) {
+    assertOtpCooldown(pending.otpSentAt, 'requesting another verification code')
   }
 
   const hashedPassword = await hashPassword(password)
@@ -168,6 +185,8 @@ export async function resendOtp(email: string) {
     throw new Error('No active verification process for this email')
   }
 
+  assertOtpCooldown(pending.otpSentAt, 'requesting another OTP')
+
   const newOtp = generateOTP()
 
   await prisma.pendingUserVerification.update({
@@ -188,6 +207,13 @@ export async function forgotPassword(email: string) {
   const user = await findUserByEmail(email)
   if (!user) {
     throw new Error('Email not found')
+  }
+
+  const pending = await prisma.pendingUserVerification.findUnique({
+    where: { email },
+  })
+  if (pending) {
+    assertOtpCooldown(pending.otpSentAt, 'requesting another OTP')
   }
 
   const otp = generateOTP()

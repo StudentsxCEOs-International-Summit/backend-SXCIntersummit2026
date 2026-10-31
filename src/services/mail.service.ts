@@ -50,7 +50,12 @@ function getSenders(): MailSender[] {
   if (senders) return senders;
 
   const accounts = [
-    { name: "smtp-1", user: env.SMTP_USER, pass: env.SMTP_PASS, from: env.SMTP_FROM || DEFAULT_FROM },
+    {
+      name: "smtp-1",
+      user: env.SMTP_USER,
+      pass: env.SMTP_PASS,
+      from: env.SMTP_FROM || env.SMTP_USER || DEFAULT_FROM,
+    },
     {
       name: "smtp-2",
       user: env.SMTP_USER_2,
@@ -109,6 +114,9 @@ export function classifyMailError(error: unknown): number | null {
   }
   if (/daily user sending limit|sending limit exceeded|too many (login|messages|recipients)|5\.4\.5|4\.7\.0|rate limit|quota/i.test(text)) {
     return 3 * HOUR;
+  }
+  if (/suspicious|blocked|spam|554 5\.7\.1|550 5\.7\.1/i.test(text)) {
+    return HOUR;
   }
   return 0; // timeouts, resets and anything unknown: try the other account, keep this one in rotation
 }

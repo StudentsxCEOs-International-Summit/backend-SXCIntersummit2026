@@ -146,6 +146,7 @@ export async function verifyPayment(req: AuthRequest, res: Response) {
       }
     }
 
+    financeLogger.info({ teamId, status, verifierId: req.user?.id }, 'Payment verification processed successfully');
     return ok(res, updatedTeam, 'Payment verification processed successfully.');
   } catch (error: any) {
     financeLogger.error({ err: error, teamId: req.body?.teamId }, 'Payment verification error');

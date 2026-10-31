@@ -75,6 +75,7 @@ test('classifies Gmail errors', () => {
   assert.equal(classifyMailError(Object.assign(new Error('Invalid login'), { code: 'EAUTH' })), HOUR)
   assert.equal(classifyMailError(new Error('Username and Password not accepted')), HOUR)
   assert.equal(classifyMailError(new Error('550 5.1.1 The email account does not exist')), null)
+  assert.equal(classifyMailError(new Error('550 5.7.1 Message appears suspicious and was blocked')), HOUR)
   assert.equal(classifyMailError(Object.assign(new Error('Connection timeout'), { code: 'ETIMEDOUT' })), 0)
 })
 
