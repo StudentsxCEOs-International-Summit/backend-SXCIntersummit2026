@@ -9,6 +9,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "seed": "npx tsx prisma/seed.ts",
+    "smtp:check": "tsx scripts/check-smtp.ts",
     "build": "npm run prisma:generate && tsc",
     "start": "node dist/src/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
