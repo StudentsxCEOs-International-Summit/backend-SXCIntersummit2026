@@ -11,7 +11,7 @@
     "seed": "npx tsx prisma/seed.ts",
     "build": "npm run prisma:generate && tsc",
     "start": "node dist/src/server.js",
-    "test": "tsx --test tests/**/*.test.ts"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
