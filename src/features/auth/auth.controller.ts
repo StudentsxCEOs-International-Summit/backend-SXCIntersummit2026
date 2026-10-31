@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
-import { ok, badRequest, unauthorized, forbidden, internalError } from '../../utils/response'
+import { ok, badRequest, unauthorized, forbidden, internalError, fail } from '../../utils/response'
+import { AppError } from '../../middlewares/error.middleware'
 import { env } from '../../configs/env'
 import { createChildLogger } from '../../configs/logger'
 
@@ -34,6 +35,7 @@ export async function register(req: Request, res: Response) {
       201,
     )
   } catch (error: any) {
+    if (error instanceof AppError) return fail(res, error.message, error.statusCode)
     return badRequest(res, error.message)
   }
 }
@@ -76,6 +78,7 @@ export async function resendOtp(req: Request, res: Response) {
 
     return ok(res, null, 'A new OTP has been sent to your email.')
   } catch (error: any) {
+    if (error instanceof AppError) return fail(res, error.message, error.statusCode)
     return badRequest(res, error.message)
   }
 }
@@ -87,6 +90,7 @@ export async function forgotPassword(req: Request, res: Response) {
 
     return ok(res, null, 'Password reset OTP has been sent to your email.')
   } catch (error: any) {
+    if (error instanceof AppError) return fail(res, error.message, error.statusCode)
     return badRequest(res, error.message)
   }
 }
