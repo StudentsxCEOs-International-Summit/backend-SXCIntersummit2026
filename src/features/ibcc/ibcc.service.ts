@@ -263,11 +263,14 @@ export async function registerTeam(
     timeout: 60000,
   });
 
+  const waGroupLink = env.IBCC_WA_GROUP_LINK ?? null;
+
   const leaderEmailHtml = renderTeamRegistrationConfirmationEmail({
     leaderName: leaderUser.name,
     teamName: result.team.name,
     teamCode: result.teamCode,
     memberCount: 1 + (input.members || []).length,
+    waGroupLink: waGroupLink ?? undefined,
   });
 
   sendMail({
@@ -286,7 +289,7 @@ export async function registerTeam(
     driveFolderUrl: `https://drive.google.com/drive/folders/${result.teamFolderId}`,
     status: 'REGISTERED',
     memberCount: 1 + (input.members || []).length,
-    waGroupLink: null,
+    waGroupLink,
   };
 }
 
@@ -409,6 +412,7 @@ export async function getMyTeam(userId: number) {
       email: team.leader.email,
       institution: team.leader.institution_name,
     },
+    waGroupLink: env.IBCC_WA_GROUP_LINK ?? null,
     members: nonLeaderMembers,
     submissions: {
       requirementsCompleted: team.submissionTeam.some(
@@ -761,14 +765,14 @@ export async function publishResults(qualifiedTeamIds: number[]) {
 export async function getAllTeamsForAdmin() {
   const teams = await prisma.team.findMany({
     include: {
-      leader: { select: { id: true, name: true, email: true, institution: true, whatsapp: true } },
+      leader: { select: { id: true, name: true, email: true, institution: true, wa_number: true } },
       TeamMember: {
         include: {
-          user: { select: { id: true, name: true, email: true, institution: true, whatsapp: true } },
+          user: { select: { id: true, name: true, email: true, institution: true, wa_number: true } },
         },
       },
       statuscode: true,
-      Submission: {
+      submissionTeam: {
         include: {
           Files: true,
         },
