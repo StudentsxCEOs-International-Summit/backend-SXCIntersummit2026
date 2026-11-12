@@ -1,6 +1,9 @@
 import prisma from "../../configs/db";
+import { createChildLogger } from "../../configs/logger";
 import { sendMail } from "../../services/mail.service";
 import { renderStatusChangeEmail } from "./ibcc.templates";
+
+const ibccLogger = createChildLogger("IBCC");
 
 export async function notifyStatusChange(
   teamId: number,
@@ -17,7 +20,7 @@ export async function notifyStatusChange(
     });
 
     if (!team || !team.leader?.email) {
-      console.warn(`[STATUS] Cannot notify team ${teamId}: team or leader not found.`);
+      ibccLogger.warn({ teamId }, "Cannot notify team: team or leader not found");
       return;
     }
 
@@ -46,7 +49,7 @@ export async function notifyStatusChange(
       },
     });
   } catch (error: any) {
-    console.error("[STATUS] notifyStatusChange error:", error.message);
+    ibccLogger.error({ err: error }, "notifyStatusChange error");
   }
 }
 
@@ -91,7 +94,7 @@ export async function sendSemifinalResultEmails(
         status: result.success ? "success" : "failed",
       });
     } catch (err: any) {
-      console.error(`[STATUS] Failed to send semifinal email to ${team.leader.email}:`, err.message);
+      ibccLogger.error({ err, leaderEmail: team.leader.email }, "Failed to send semifinal email");
     }
   }
 

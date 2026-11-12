@@ -1,84 +1,180 @@
 import nodemailer from "nodemailer";
 import { env } from "../configs/env";
+import { FailoverPool, HOUR } from "../utils/failover";
+import { createChildLogger } from "../configs/logger";
+
+const mailLogger = createChildLogger("MAIL");
 
 export interface SendMailOptions {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  /** Extra mail headers (e.g. marking an automatic message). */
+  headers?: Record<string, string>;
   attachments?: nodemailer.SendMailOptions["attachments"];
 }
 
-let transporter: nodemailer.Transporter | null = null;
 
-export function getMailTransporter(): nodemailer.Transporter | null {
-  if (transporter) return transporter;
+interface MailSender {
+  name: string;
+  from: string;
+  transporter: nodemailer.Transporter;
+  /** Timestamps of mails sent in the last 24 hours, used to rotate before Gmail's daily cap. */
+  sentAt: number[];
+}
 
-  if (!env.SMTP_USER || !env.SMTP_PASS) {
-    console.warn(
-      "[MAIL SERVICE] SMTP_USER or SMTP_PASS not set in environment. Running in mock console mode.",
-    );
-    return null;
-  }
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_FROM = "SXC Intersummit 2026 <no-reply@sxcintersummit.com>";
+const SENDER_NAME = "SXC International Summit";
 
-  transporter = nodemailer.createTransport({
+/** A bare address shows up as just "itsx...@gmail.com"; with a name the inbox shows who it is from. */
+const withSenderName = (from: string) => (from.includes("<") ? from : `"${SENDER_NAME}" <${from}>`);
+
+function createTransport(user: string, pass: string) {
+  return nodemailer.createTransport({
     host: env.SMTP_HOST || "smtp.gmail.com",
     port: env.SMTP_PORT || 465,
     secure: env.SMTP_SECURE ?? true,
-    auth: {
-      user: env.SMTP_USER,
-      pass: env.SMTP_PASS,
-    },
+    auth: { user, pass },
+    // Fail fast instead of holding the request for nodemailer's 2-minute default when the
+    // SMTP port is blocked, and reuse connections so Gmail sees fewer logins.
+    pool: true,
+    maxConnections: 3,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
   });
+}
 
-  return transporter;
+let senders: MailSender[] | null = null;
+let senderPool: FailoverPool<MailSender> | null = null;
+let rotation = 0;
+
+/** SMTP_USER/PASS is the main account; SMTP_USER_2/PASS_2 is an optional second one. */
+function getSenders(): MailSender[] {
+  if (senders) return senders;
+
+  const accounts = [
+    { name: "smtp-1", user: env.SMTP_USER, pass: env.SMTP_PASS, from: withSenderName(env.SMTP_FROM || DEFAULT_FROM) },
+    {
+      name: "smtp-2",
+      user: env.SMTP_USER_2,
+      pass: env.SMTP_PASS_2,
+      from: withSenderName(env.SMTP_FROM_2 || env.SMTP_USER_2 || DEFAULT_FROM),
+    },
+  ];
+
+  senders = accounts
+    .filter((a) => a.user && a.pass)
+    .map((a) => ({
+      name: a.name,
+      from: a.from,
+      transporter: createTransport(a.user!, a.pass!),
+      sentAt: [],
+    }));
+
+  if (senders.length === 0) {
+    mailLogger.warn("SMTP_USER or SMTP_PASS not set in environment. Running in mock console mode.");
+  }
+  senderPool = new FailoverPool(senders, "MAIL");
+  return senders;
+}
+
+export function getMailTransporter(): nodemailer.Transporter | null {
+  return getSenders()[0]?.transporter ?? null;
+}
+
+const sentInLastDay = (sender: MailSender, now: number) => {
+  sender.sentAt = sender.sentAt.filter((t) => now - t < DAY_MS);
+  return sender.sentAt.length;
+};
+
+/** Takes turns between accounts, and leaves an account alone once it nears its daily cap. */
+function senderOrder(all: MailSender[]): MailSender[] {
+  const now = Date.now();
+  const limit = env.SMTP_DAILY_LIMIT ?? 450;
+  const turn = rotation++;
+  const rotated = all.map((_, i) => all[(turn + i) % all.length]);
+  const underCap = rotated.filter((s) => sentInLastDay(s, now) < limit);
+  if (underCap.length > 0) return underCap;
+  // Everyone is past the soft cap: still try, least used first, rather than refuse to send.
+  return [...rotated].sort((a, b) => a.sentAt.length - b.sentAt.length);
+}
+
+/** How long a failed SMTP account should rest (see FailoverPool for the meaning of the result). */
+export function classifyMailError(error: unknown): number | null {
+  const e = error as { code?: string; responseCode?: number; message?: string };
+  const text = `${e.code ?? ""} ${e.responseCode ?? ""} ${e.message ?? ""}`;
+
+  if (/EENVELOPE|5\.1\.1|user unknown|no such user|recipient (address )?rejected|invalid (recipient|address)/i.test(text)) {
+    return null; // the recipient is the problem, another sender will not help
+  }
+  if (e.code === "EAUTH" || /invalid login|username and password not accepted|application-specific password|535|534/i.test(text)) {
+    return HOUR;
+  }
+  if (/daily user sending limit|sending limit exceeded|too many (login|messages|recipients)|5\.4\.5|4\.7\.0|rate limit|quota/i.test(text)) {
+    return 3 * HOUR;
+  }
+  return 0; // timeouts, resets and anything unknown: try the other account, keep this one in rotation
 }
 
 export async function sendMail(
   options: SendMailOptions,
 ): Promise<{ success: boolean; messageId?: string }> {
-  const mailClient = getMailTransporter();
-  const fromAddress =
-    env.SMTP_FROM || "SXC Intersummit 2026 <no-reply@sxcintersummit.com>";
+  const all = getSenders();
 
-  if (!mailClient) {
-    console.log("[MOCK EMAIL ENGINE] Sending email:");
-    console.log(`To      : ${options.to}`);
-    console.log(`From    : ${fromAddress}`);
-    console.log(`Subject : ${options.subject}`);
-    console.log(`Body    : ${options.text || options.html}`);
-    if (options.attachments && options.attachments.length > 0) {
-      console.log(
-        `Attachments: ${options.attachments
-          .map((a: any) => a.filename || a.cid)
-          .join(", ")}`,
-      );
-    }
+  if (all.length === 0) {
+    const fromAddress = env.SMTP_FROM || DEFAULT_FROM;
+    mailLogger.info(
+      { to: options.to, from: fromAddress, subject: options.subject, hasAttachments: Boolean(options.attachments && options.attachments.length > 0) },
+      "Mock email dispatched",
+    );
     return { success: true, messageId: "mock-email-id" };
   }
 
   try {
-    const info = await mailClient.sendMail({
-      from: fromAddress,
-      to: options.to,
-      subject: options.subject,
-      text: options.text,
-      html: options.html,
-      attachments: options.attachments,
-    });
-
-    console.log(
-      `[MAIL SERVICE] Email sent successfully to ${options.to} (MessageId: ${info.messageId})`,
+    const { info, sender } = await senderPool!.run(
+      senderOrder(all),
+      async (candidate) => ({
+        sender: candidate,
+        info: await candidate.transporter.sendMail({
+          from: candidate.from,
+          to: options.to,
+          subject: options.subject,
+          text: options.text,
+          html: options.html,
+          headers: options.headers,
+          attachments: options.attachments,
+        }),
+      }),
+      classifyMailError,
     );
+
+    sender.sentAt.push(Date.now());
+    mailLogger.info({ to: options.to, sender: sender.name, messageId: info.messageId }, "Email sent successfully");
     return { success: true, messageId: info.messageId };
   } catch (error: any) {
-    console.error(
-      `[MAIL SERVICE] Failed to send email to ${options.to}:`,
-      error.message,
-    );
+    mailLogger.error({ err: error, to: options.to }, "Failed to send email");
     throw new Error(`Failed to send email: ${error.message}`);
   }
 }
+
+/** For the admin console: how many mails each account sent in 24h and whether it is resting. */
+export function getMailStatus() {
+  const all = getSenders();
+  const now = Date.now();
+  const limit = env.SMTP_DAILY_LIMIT ?? 450;
+  const pool = senderPool!.status(now);
+  return all.map((s, i) => ({
+    name: s.name,
+    sentLast24h: sentInLastDay(s, now),
+    softDailyLimit: limit,
+    up: pool[i].up,
+    restingForMinutes: Math.ceil(pool[i].downForMs / 60_000),
+  }));
+}
+
 
 const DEFAULT_EMAIL_HEADER_BANNER =
   "https://lh3.googleusercontent.com/d/1edkvpTlvJHNLjjYl-VZEZRDnu9B3TnYv";
@@ -148,7 +244,7 @@ export function renderEmailTemplate({
                 Connect with us:
                 <a href="https://instagram.com/sxcintersummit" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; margin: 0 6px;">Instagram</a> &bull;
                 <a href="https://linkedin.com/company/studentsxceos-international-summit" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; margin: 0 6px;">LinkedIn</a> &bull;
-                <a href="https://tiktok.com/@intersummitsxc" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; margin: 0 6px;">TikTok</a>
+                <a href="https://www.tiktok.com/@intersummitsxc" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: none; margin: 0 6px;">TikTok</a>
               </p>
               <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #94a3b8;">
                 ${footerNote ? `${footerNote}<br>` : "If you did not initiate this request, you can safely ignore this email.<br>"}
@@ -211,6 +307,8 @@ export async function sendOtpEmail(
     subject,
     html: htmlContent,
     text: `Your SXC Intersummit 2026 OTP code is: ${otp}. This code is valid for 5 minutes.`,
+    // Marks it as an automatic, one-to-one message (no auto-replies, not a newsletter).
+    headers: { "Auto-Submitted": "auto-generated", "X-Auto-Response-Suppress": "OOF, AutoReply" },
   });
 }
 

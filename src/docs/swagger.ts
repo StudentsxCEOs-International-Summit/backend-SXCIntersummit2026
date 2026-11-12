@@ -138,7 +138,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
           email: {
             type: 'string',
             format: 'email',
-            example: 'masheinrich@gmail.com',
+            example: 'jane.doe@example.com',
           },
           password: {
             type: 'string',
@@ -171,7 +171,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
           email: {
             type: 'string',
             format: 'email',
-            example: 'masheinrich@gmail.com',
+            example: 'jane.doe@example.com',
           },
           otp: {
             type: 'string',
@@ -190,7 +190,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
           email: {
             type: 'string',
             format: 'email',
-            example: 'masheinrich@gmail.com',
+            example: 'jane.doe@example.com',
           },
         },
       },
@@ -201,7 +201,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
           email: {
             type: 'string',
             format: 'email',
-            example: 'masheinrich@gmail.com',
+            example: 'jane.doe@example.com',
           },
         },
       },
@@ -225,12 +225,13 @@ REST API documentation for **SxC International Summit 2026** backend system.
       },
       IbccMemberItemInput: {
         type: 'object',
-        required: ['fullName', 'email', 'whatsapp', 'institution', 'yearOfStudy'],
+        required: ['fullName', 'email', 'whatsapp', 'institution', 'major', 'yearOfStudy'],
         properties: {
           fullName: { type: 'string', minLength: 2, example: 'Jane Doe' },
           email: { type: 'string', format: 'email', example: 'jane@ui.ac.id' },
           whatsapp: { type: 'string', minLength: 8, example: '+6281298765432' },
-          institution: { type: 'string', minLength: 3, example: 'Universitas Indonesia - Accounting' },
+          institution: { type: 'string', minLength: 3, example: 'Universitas Indonesia' },
+          major: { type: 'string', minLength: 2, example: 'Accounting' },
           yearOfStudy: {
             type: 'string',
             enum: ['1st year', '2nd year', '3rd year', '4th year'],
@@ -240,10 +241,11 @@ REST API documentation for **SxC International Summit 2026** backend system.
       },
       IbccLeaderInfoInput: {
         type: 'object',
-        required: ['whatsapp', 'institution', 'yearOfStudy'],
+        required: ['whatsapp', 'institution', 'major', 'yearOfStudy'],
         properties: {
           whatsapp: { type: 'string', minLength: 8, example: '+6281234567890' },
-          institution: { type: 'string', minLength: 3, example: 'Universitas Indonesia - Management' },
+          institution: { type: 'string', minLength: 3, example: 'Universitas Indonesia' },
+          major: { type: 'string', minLength: 2, example: 'Management' },
           yearOfStudy: {
             type: 'string',
             enum: ['1st year', '2nd year', '3rd year', '4th year'],
@@ -258,7 +260,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
           teamName: { type: 'string', example: 'The Innovators' },
           teamCode: { type: 'string', example: 'MYR6JD' },
           driveFolderId: { type: 'string', example: '1A2b3c4D5e6F7g8H9i0J' },
-          driveFolderUrl: { type: 'string', example: 'https://drive.google.com/drive/folders/1A2b3c4D5e6F7g8H9i0J' },
+          driveFolderUrl: { type: 'string', example: 'https://drive.google.com/drive/folders/EXAMPLE_FOLDER_ID' },
           status: { type: 'string', example: 'REGISTERED' },
           memberCount: { type: 'integer', example: 2 },
           waGroupLink: { type: 'string', example: 'https://chat.whatsapp.com/IBCC2026PreliminaryStageInvite' },
@@ -278,7 +280,6 @@ REST API documentation for **SxC International Summit 2026** backend system.
             properties: {
               status: { type: 'string', example: 'PENDING_VERIFICATION' },
               isUploaded: { type: 'boolean', example: true },
-              fileUrl: { type: 'string', nullable: true, example: 'https://drive.google.com/file/d/.../view' },
               submittedAt: { type: 'string', format: 'date-time', nullable: true, example: '2026-10-15T10:00:00.000Z' },
             },
           },
@@ -296,7 +297,8 @@ REST API documentation for **SxC International Summit 2026** backend system.
               id: { type: 'integer', example: 12 },
               name: { type: 'string', example: 'John Doe' },
               email: { type: 'string', example: 'leader@ui.ac.id' },
-              institution: { type: 'string', example: 'Universitas Indonesia - Management' },
+              institution: { type: 'string', example: 'Universitas Indonesia' },
+              major: { type: 'string', nullable: true, example: 'Management' },
             },
           },
           members: {
@@ -307,7 +309,8 @@ REST API documentation for **SxC International Summit 2026** backend system.
                 id: { type: 'integer', example: 15 },
                 name: { type: 'string', example: 'Jane Doe' },
                 email: { type: 'string', example: 'jane@ui.ac.id' },
-                institution: { type: 'string', example: 'Universitas Indonesia - Accounting' },
+                institution: { type: 'string', example: 'Universitas Indonesia' },
+                major: { type: 'string', nullable: true, example: 'Accounting' },
                 yearOfStudy: { type: 'string', example: '3rd year' },
               },
             },
@@ -341,8 +344,8 @@ REST API documentation for **SxC International Summit 2026** backend system.
           stage: { type: 'string', example: 'REGISTRATION' },
           type: { type: 'string', example: 'PAYMENT' },
           submittedAt: { type: 'string', format: 'date-time', example: '2026-10-13T01:45:00.000Z' },
-          fileUrl: { type: 'string', example: 'https://drive.google.com/file/d/1JiO42ObUK8ft6yjCFncKHr3YFBpTW6XJ/view?usp=drivesdk' },
-          gdriveId: { type: 'string', example: '1JiO42ObUK8ft6yjCFncKHr3YFBpTW6XJ' },
+          fileUrl: { type: 'string', example: 'https://drive.google.com/file/d/EXAMPLE_FILE_ID/view' },
+          gdriveId: { type: 'string', example: 'EXAMPLE_FILE_ID' },
         },
       },
       IbccSemifinalSubmissionResponse: {
@@ -351,8 +354,8 @@ REST API documentation for **SxC International Summit 2026** backend system.
           submissionId: { type: 'integer', example: 15 },
           stage: { type: 'string', example: 'SEMIFINAL' },
           submittedAt: { type: 'string', format: 'date-time', example: '2026-10-13T01:42:59.946Z' },
-          fileUrl: { type: 'string', example: 'https://drive.google.com/file/d/1WYQWf2820zy5aqk8vWXkTq8zbm2AtP5L/view?usp=drivesdk' },
-          gdriveId: { type: 'string', example: '1WYQWf2820zy5aqk8vWXkTq8zbm2AtP5L' },
+          fileUrl: { type: 'string', example: 'https://drive.google.com/file/d/EXAMPLE_FILE_ID/view' },
+          gdriveId: { type: 'string', example: 'EXAMPLE_FILE_ID' },
         },
       },
     },
@@ -387,7 +390,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
                     data: {
                       type: 'object',
                       properties: {
-                        email: { type: 'string', example: 'masheinrich@gmail.com' },
+                        email: { type: 'string', example: 'jane.doe@example.com' },
                       },
                     },
                   },
@@ -478,7 +481,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
                           properties: {
                             id: { type: 'integer', example: 1 },
                             name: { type: 'string', example: 'John Doe' },
-                            email: { type: 'string', example: 'masheinrich@gmail.com' },
+                            email: { type: 'string', example: 'jane.doe@example.com' },
                             role: { type: 'string', example: 'USER' },
                           },
                         },
@@ -711,7 +714,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
                       properties: {
                         resetToken: {
                           type: 'string',
-                          example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im1hc2RhZW5nMjk0QGdtYWlsLmNvbSIsInB1cnBvc2UiOiJyZXNldF9wYXNzd29yZCJ9...',
+                          example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
                         },
                       },
                     },
@@ -1582,13 +1585,13 @@ REST API documentation for **SxC International Summit 2026** backend system.
                   },
                   leaderInfo: {
                     type: 'string',
-                    description: 'JSON-stringified leader details: { whatsapp, institution, yearOfStudy }',
-                    example: '{"whatsapp":"+6281234567890","institution":"Universitas Indonesia - Management","yearOfStudy":"3rd year"}',
+                    description: 'JSON-stringified leader details: { whatsapp, institution, major, yearOfStudy }',
+                    example: '{"whatsapp":"+6281234567890","institution":"Universitas Indonesia","major":"Management","yearOfStudy":"3rd year"}',
                   },
                   members: {
                     type: 'string',
                     description: 'JSON-stringified array of 0 to 2 additional member objects',
-                    example: '[{"fullName":"Jane Doe","email":"jane@ui.ac.id","whatsapp":"+6281298765432","institution":"Universitas Indonesia - Accounting","yearOfStudy":"3rd year"}]',
+                    example: '[{"fullName":"Jane Doe","email":"jane@ui.ac.id","whatsapp":"+6281298765432","institution":"Universitas Indonesia","major":"Accounting","yearOfStudy":"3rd year"}]',
                   },
                   agreeTerms: { type: 'string', example: 'true' },
                   confirmParticipation: { type: 'string', example: 'true' },

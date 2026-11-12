@@ -1,8 +1,12 @@
 import { Request, Response } from 'express';
+import { createChildLogger } from '../../configs/logger';
+
+const ibccLogger = createChildLogger('IBCC');
 import { AuthRequest } from '../../middlewares/auth.middleware';
 import { cleanupUploadFiles } from '../../middlewares/clean-up-files.middleware';
 import { ok, badRequest, conflict, notFound, forbidden, internalError } from '../../utils/response';
 import { deleteFile } from '../../services/storage.service';
+import { getEffectiveDeadline } from '../../configs/appConfig';
 import {
   registerTeam,
   getMyTeam,
@@ -38,6 +42,13 @@ export async function registerTeamHandler(req: AuthRequest, res: Response) {
       return badRequest(res, 'Leader identity not found in authentication token.');
     }
 
+    // Judged by when the request arrived, so a slow upload that started before the deadline counts.
+    const receivedAt: Date = res.locals.receivedAt ?? new Date();
+    if (receivedAt >= getEffectiveDeadline()) {
+      cleanupUploadFiles(new Error('Registration closed'), req, res, () => {});
+      return forbidden(res, 'Registration is closed.');
+    }
+
     const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
     const missingFields: string[] = [];
 
@@ -66,6 +77,7 @@ export async function registerTeamHandler(req: AuthRequest, res: Response) {
       },
       input,
       registrationFiles,
+      receivedAt,
     );
 
     return ok(res, data, 'Team successfully registered for IBCC 2026!', 201);
@@ -122,7 +134,7 @@ export async function submitPreliminaryHandler(req: AuthRequest, res: Response) 
 
     const teamId = req.body.teamId ? Number(req.body.teamId) : undefined;
 
-    const data = await submitPreliminarySlideDeck(Number(leaderUser.id), file, teamId);
+    const data = await submitPreliminarySlideDeck(Number(leaderUser.id), file, teamId, res.locals.receivedAt);
     return ok(res, data, 'Preliminary slide deck submitted successfully.', 201);
   } catch (error: any) {
     if (req.file?.path) {
@@ -149,7 +161,7 @@ export async function submitSemifinalHandler(req: AuthRequest, res: Response) {
     }
 
     const teamId = req.body.teamId ? Number(req.body.teamId) : undefined;
-    const data = await submitSemifinalSlideDeck(Number(leaderUser.id), file, teamId);
+    const data = await submitSemifinalSlideDeck(Number(leaderUser.id), file, teamId, res.locals.receivedAt);
 
     return ok(res, data, 'Semifinal slide deck submitted successfully.', 201);
   } catch (error: any) {
@@ -157,7 +169,11 @@ export async function submitSemifinalHandler(req: AuthRequest, res: Response) {
       deleteFile(req.file.path);
     }
     const message = error.message || 'Failed to submit semifinal slide deck.';
-    if (message.includes('not the leader') || message.includes('not found')) {
+    if (
+      message.includes('not the leader') ||
+      message.includes('not found') ||
+      message.includes('advanced to the semifinal')
+    ) {
       return forbidden(res, message);
     }
     return internalError(res, message);
@@ -177,15 +193,19 @@ export async function submitPaymentHandler(req: AuthRequest, res: Response) {
     }
 
     const teamId = req.body.teamId ? Number(req.body.teamId) : undefined;
-    const data = await submitPaymentProof(Number(leaderUser.id), file, teamId);
+    const data = await submitPaymentProof(Number(leaderUser.id), file, teamId, res.locals.receivedAt);
 
-    return ok(res, data, 'Payment proof uploaded successfully to Google Drive.', 201);
+    return ok(res, data, 'Payment proof received and is being processed.', 201);
   } catch (error: any) {
     if (req.file?.path) {
       deleteFile(req.file.path);
     }
     const message = error.message || 'Failed to submit payment proof.';
-    if (message.includes('not the leader') || message.includes('not found')) {
+    if (
+      message.includes('not the leader') ||
+      message.includes('not found') ||
+      message.includes('advanced to the semifinal')
+    ) {
       return forbidden(res, message);
     }
     return internalError(res, message);
@@ -246,7 +266,7 @@ export async function getAdminTeamsHandler(_req: AuthRequest, res: Response) {
     const teams = await getAllTeamsForAdmin();
     return ok(res, teams, 'Teams retrieved successfully.');
   } catch (error: any) {
-    console.error('[IBCC] getAdminTeamsHandler error:', error.message);
+    ibccLogger.error({ err: error, msg: 'getAdminTeamsHandler failed' });
     return internalError(res, 'Failed to retrieve teams.');
   }
 }
@@ -266,7 +286,7 @@ export async function updatePreliminaryStatusHandler(req: AuthRequest, res: Resp
 
     return ok(res, updatedTeam, 'Preliminary status updated successfully.');
   } catch (error: any) {
-    console.error('[IBCC] updatePreliminaryStatusHandler error:', error.message);
+    ibccLogger.error({ err: error, teamId: req.params?.teamId, msg: 'updatePreliminaryStatusHandler failed' });
     if (error.message?.includes('not found')) {
       return notFound(res, error.message);
     }

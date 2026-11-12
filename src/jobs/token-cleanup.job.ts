@@ -1,5 +1,8 @@
 import cron from 'node-cron'
 import prisma from '../configs/db'
+import { createChildLogger } from '../configs/logger'
+
+const tokenCleanupLogger = createChildLogger('TOKEN_CLEANUP')
 
 export function startTokenCleanupJob() {
   // Runs every hour at minute 0 (0 * * * *)
@@ -14,10 +17,10 @@ export function startTokenCleanupJob() {
       })
 
       if (result.count > 0) {
-        console.log(`[CLEANUP JOB] Purged ${result.count} expired token(s) from blacklist.`)
+        tokenCleanupLogger.info({ purgedCount: result.count }, 'Purged expired tokens from blacklist')
       }
     } catch (error) {
-      console.error('[CLEANUP JOB] Failed to purge expired tokens:', error)
+      tokenCleanupLogger.error({ err: error }, 'Failed to purge expired tokens')
     }
   })
 }
@@ -35,7 +38,7 @@ export async function triggerTokenCleanup(): Promise<{ purgedCount: number }> {
   })
 
   if (result.count > 0) {
-    console.log(`[CLEANUP JOB] Purged ${result.count} expired token(s) from blacklist.`)
+    tokenCleanupLogger.info({ purgedCount: result.count }, 'Purged expired tokens from blacklist')
   }
 
   return { purgedCount: result.count }

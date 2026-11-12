@@ -4,6 +4,9 @@ import prisma from '../../configs/db';
 import { ok, badRequest, internalError, notFound } from '../../utils/response';
 import { AuthRequest } from '../../middlewares/auth.middleware';
 import { sendMail, renderEmailTemplate } from '../../services/mail.service';
+import { createChildLogger } from '../../configs/logger';
+
+const financeLogger = createChildLogger('FINANCE');
 
 function generateCode(): string {
   return crypto.randomBytes(4).toString('hex').toUpperCase();
@@ -145,7 +148,7 @@ export async function verifyPayment(req: AuthRequest, res: Response) {
 
     return ok(res, updatedTeam, 'Payment verification processed successfully.');
   } catch (error: any) {
-    console.error('[FINANCE] verifyPayment error:', error.message);
+    financeLogger.error({ err: error, teamId: req.body?.teamId }, 'Payment verification error');
     return internalError(res, 'Failed to verify payment.');
   }
 }
@@ -193,7 +196,7 @@ export async function verifyRequirement(req: AuthRequest, res: Response) {
 
     return ok(res, updatedTeam, `Requirement (${type}) ${status} successfully.`);
   } catch (error: any) {
-    console.error('[FINANCE] verifyRequirement error:', error.message);
+    financeLogger.error({ err: error, teamId: req.body?.teamId, type: req.body?.type }, 'Requirement verification error');
     return internalError(res, 'Failed to verify requirement.');
   }
 }

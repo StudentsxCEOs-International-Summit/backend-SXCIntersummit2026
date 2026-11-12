@@ -4,6 +4,9 @@ import prisma from "../../configs/db";
 import { ok, badRequest, internalError, notFound } from "../../utils/response";
 import { AuthRequest } from "../../middlewares/auth.middleware";
 import { notifyStatusChange } from "../ibcc/ibcc.status";
+import { createChildLogger } from "../../configs/logger";
+
+const accessCodeLogger = createChildLogger("ACCESS_CODE");
 
 /**
  * Generate a cryptographically random 8-character alphanumeric access code.
@@ -52,7 +55,7 @@ export async function generateAccessCode(req: AuthRequest, res: Response) {
       201,
     );
   } catch (error: any) {
-    console.error("[ACCESS CODE] generate error:", error.message);
+    accessCodeLogger.error({ err: error, teamId: req.body?.teamId }, "Access code generation error");
     return internalError(res, "Failed to generate access code.");
   }
 }
@@ -105,7 +108,7 @@ export async function loginWithAccessCode(req: Request, res: Response) {
       "Semifinal login successful.",
     );
   } catch (error: any) {
-    console.error("[ACCESS CODE] loginWithAccessCode error:", error.message);
+    accessCodeLogger.error({ err: error }, "Access code authentication error");
     return internalError(res, "Failed to authenticate with access code.");
   }
 }

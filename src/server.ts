@@ -1,22 +1,27 @@
 import express from 'express'
 import cors from 'cors'
-import morgan from 'morgan'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import swaggerUi from 'swagger-ui-express'
+import pinoHttp from 'pino-http'
+import crypto from 'crypto'
 import { env } from './configs/env'
+import { logger } from './configs/logger'
 import { errorHandler } from './middlewares/error.middleware'
 import { notFound } from './middlewares/not-found.middleware'
 import { apiRateLimiter } from './middlewares/rate-limiter.middleware'
 import { swaggerSpec, swaggerUiOptions } from './docs/swagger'
 import { startTokenCleanupJob } from './jobs/token-cleanup.job'
 import { startEmailSchedulerJob } from './jobs/email-scheduler.job'
+import { startDriveUploadWorker } from './jobs/drive-upload.job'
 import routes from './routes'
 import path from 'path'
 
 const app = express()
 
-app.set('trust proxy', true)
+// Number of reverse proxies in front of the app (nginx = 1, Cloudflare + nginx = 2); `true` would
+// let clients spoof their IP through X-Forwarded-For and dodge the rate limiter.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1))
 
 app.use(
   helmet({
@@ -42,24 +47,54 @@ app.use(
 app.use(cookieParser())
 app.use(express.json({ limit: '2mb' }))
 app.use(express.urlencoded({ extended: true }))
-app.use(morgan(env.NODE_ENV === 'production' ? 'combined' : 'dev'))
 
-app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')))
+app.use(
+  pinoHttp({
+    logger,
+    genReqId: (req) => (req.headers['x-request-id'] as string) || crypto.randomUUID(),
+    customLogLevel: (_req, res, err) => {
+      if (res.statusCode >= 500 || err) return 'error'
+      if (res.statusCode >= 400) return 'warn'
+      return 'info'
+    },
+    customSuccessMessage: (req, res) => `${req.method} ${req.url} completed with ${res.statusCode}`,
+    customErrorMessage: (req, _res, err) => `${req.method} ${req.url} failed: ${err.message}`,
+  }),
+)
+
+// Uploaded files (ID cards, payment proofs) live on disk only until they reach Drive; nothing under
+// /uploads is ever served.
+app.use('/uploads', (_req, res) => {
+  res.status(404).json({ success: false, message: 'Not found' })
+})
 app.use('/public', express.static(path.resolve(process.cwd(), 'public')))
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions))
-app.get('/api-docs.json', (_req, res) => {
-  res.setHeader('Content-Type', 'application/json')
-  res.send(swaggerSpec)
-})
+// The API docs only exist on a developer's machine: never in production or on a shared staging server.
+const docsEnabled = env.NODE_ENV !== 'production' && env.APP_ENV === 'local'
+
+if (docsEnabled) {
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions))
+  app.get('/api-docs.json', (_req, res) => {
+    res.setHeader('Content-Type', 'application/json')
+    res.send(swaggerSpec)
+  })
+}
 
 app.use('/api', apiRateLimiter)
 
 app.get('/', (_req, res) => {
-  res.json({
+  if (env.NODE_ENV === 'production') {
+    return res.redirect('https://sxcinternationalsummit.com')
+  }
+
+  return res.json({
     message: 'API SXC Intersummit 2026 is running',
-    docs: `${env.APP_URL}/api-docs`,
+    ...(docsEnabled ? { docs: `${env.APP_URL}/api-docs` } : {}),
   })
+})
+
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok' })
 })
 
 app.use('/api', routes)
@@ -70,13 +105,27 @@ app.use(errorHandler)
 if (env.NODE_ENV !== 'test') {
   startTokenCleanupJob()
   startEmailSchedulerJob()
+  startDriveUploadWorker()
 
-  app.listen(env.PORT, () => {
-    console.log(`API running at ${env.APP_URL}`)
-    console.log(`Swagger Docs available at ${env.APP_URL}/api-docs`)
-    console.log(`NODE_ENV : ${env.NODE_ENV}`)
-    console.log(`APP_ENV  : ${env.APP_ENV}`)
+  const server = app.listen(env.PORT, () => {
+    logger.info({
+      context: 'SYSTEM',
+      port: env.PORT,
+      appUrl: env.APP_URL,
+      nodeEnv: env.NODE_ENV,
+      appEnv: env.APP_ENV,
+      msg: `API running at ${env.APP_URL}`,
+    })
+    if (docsEnabled) {
+      logger.info({ context: 'SYSTEM', msg: `Swagger docs available at ${env.APP_URL}/api-docs` })
+    }
   })
+
+  // Node cuts a request that is still arriving after 5 minutes by default; 50 MB over a weak
+  // mobile connection can take longer. nginx already buffers the body, so this is a safety net.
+  server.requestTimeout = 10 * 60_000
+  server.headersTimeout = 65_000
+  server.keepAliveTimeout = 65_000
 }
 
 export default app

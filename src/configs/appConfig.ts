@@ -6,6 +6,8 @@
  * can change them at runtime without redeploying.
  */
 
+import logger from './logger';
+
 export interface AppConfigType {
   /** ISO-8601 deadline for standard registration */
   REGISTRATION_DEADLINE: string;
@@ -47,7 +49,7 @@ export function getAppConfig(): AppConfigType {
 
 export function reloadAppConfig(): AppConfigType {
   _config = loadFromEnv();
-  console.log("[APP CONFIG] Configuration reloaded:", _config);
+  logger.info({ context: 'APP_CONFIG', config: _config }, 'Configuration reloaded');
   return _config;
 }
 
@@ -59,7 +61,7 @@ export function updateAppConfig(updates: Partial<AppConfigType>): AppConfigType 
     ..._config,
     ...updates,
   };
-  console.log("[APP CONFIG] Configuration updated dynamically:", _config);
+  logger.info({ context: 'APP_CONFIG', config: _config }, 'Configuration updated dynamically');
   return _config;
 }
 
