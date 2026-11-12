@@ -68,6 +68,7 @@ const envSchema = z
     // Optional: committee address that gets an email for every new Contact page enquiry.
     CONTACT_NOTIFY_EMAIL: z.email().optional(),
     CRON_SECRET: z.string().optional(),
+    IBCC_WA_GROUP_LINK: z.url().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production" && !value.CORS_ORIGIN) {

@@ -9,6 +9,21 @@ export interface RegistrationEmailProps {
 }
 
 export function renderTeamRegistrationConfirmationEmail(props: RegistrationEmailProps): string {
+  const waGroupBlock = props.waGroupLink
+    ? `
+    <div style="background-color: #ecfdf5; border: 1px solid #10b981; border-radius: 12px; padding: 20px; margin: 24px 0;">
+      <p style="margin: 0 0 8px 0; font-size: 14px; font-weight: 700; color: #065f46;">
+        Join the Preliminary WhatsApp Group
+      </p>
+      <p style="margin: 0 0 16px 0; font-size: 13px; line-height: 1.5; color: #475569;">
+        Case distribution, announcements, and Q&amp;A for the preliminary stage are shared in this group. Every team member should join.
+      </p>
+      <a href="${props.waGroupLink}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 12px 24px; background-color: #059669; color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 700;">
+        Join WhatsApp Group
+      </a>
+    </div>`
+    : '';
+
   const contentHtml = `
     <h2 style="margin: 0 0 16px 0; color: #0f172a; font-size: 19px; font-weight: 700;">
       Welcome to IBCC SxC International Summit 2026!
@@ -32,7 +47,7 @@ export function renderTeamRegistrationConfirmationEmail(props: RegistrationEmail
         Please keep this code safe. It will be your identifier throughout the competition.
       </p>
     </div>
-
+${waGroupBlock}
     <div style="margin: 24px 0; padding-top: 16px; border-top: 1px solid #e2e8f0;">
       <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #334155;">Need Assistance?</h4>
       <p style="margin: 0 0 8px 0; font-size: 13px; line-height: 1.5; color: #64748b;">
