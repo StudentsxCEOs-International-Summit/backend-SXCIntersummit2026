@@ -3,6 +3,7 @@ import { createChildLogger } from '../../configs/logger';
 
 const ibccLogger = createChildLogger('IBCC');
 import prisma from '../../configs/db';
+import { env } from '../../configs/env';
 import { hashPassword } from '../../utils/bcrypt';
 import { sendMail } from '../../services/mail.service';
 import { PENDING_PREFIX, pendingFilePath } from '../../services/storage.service';
@@ -237,6 +238,8 @@ export async function registerTeam(
     timeout: 20000,
   });
 
+  const waGroupLink = env.IBCC_WA_GROUP_LINK ?? null;
+
   result.pendingFileIds.forEach(enqueueDriveUpload);
 
   const leaderEmailHtml = renderTeamRegistrationConfirmationEmail({
@@ -244,6 +247,7 @@ export async function registerTeam(
     teamName: result.team.name,
     teamCode: result.teamCode,
     memberCount: 1 + (input.members || []).length,
+    waGroupLink: waGroupLink ?? undefined,
   });
 
   sendMail({
@@ -263,7 +267,7 @@ export async function registerTeam(
     filesProcessing: true,
     status: 'REGISTERED',
     memberCount: 1 + (input.members || []).length,
-    waGroupLink: null,
+    waGroupLink,
   };
 }
 
@@ -454,6 +458,7 @@ export async function getMyTeam(userId: number) {
       institution: team.leader.institution_name,
       major: team.leader.major,
     },
+    waGroupLink: env.IBCC_WA_GROUP_LINK ?? null,
     members: nonLeaderMembers,
     submissions: {
       requirementsCompleted: team.submissionTeam.some(

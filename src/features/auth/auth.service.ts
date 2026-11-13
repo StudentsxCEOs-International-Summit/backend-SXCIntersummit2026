@@ -7,18 +7,39 @@ import { env } from '../../configs/env'
 import { hashPassword, comparePassword } from '../../utils/bcrypt'
 import { signToken, decodeToken } from '../../utils/jwt'
 import { sendOtpEmail } from '../../services/mail.service'
+import { AppError } from '../../middlewares/error.middleware'
 import { GoogleUserInfo } from '../../services/google-auth.service'
 import { RegisterInput, OtpInput } from './auth.schema'
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000
-const OTP_COOLDOWN_MS = 60 * 1000
 
-function assertOtpCooldown(otpSentAt?: Date | null, action = 'requesting another verification code') {
-  if (!otpSentAt) return
-  const elapsedMs = Date.now() - new Date(otpSentAt).getTime()
-  if (elapsedMs < OTP_COOLDOWN_MS) {
-    const remainingSeconds = Math.ceil((OTP_COOLDOWN_MS - elapsedMs) / 1000)
-    throw new Error(`Please wait ${remainingSeconds} second(s) before ${action}.`)
+/**
+ * A second code is not mailed before this much time has passed. Pressing Register or Resend again and
+ * again used to send the same person up to ten mails, which burned the daily sending quota and made
+ * Gmail flag the OTP mails as suspicious.
+ */
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000
+
+/** Shown when the verification mail could not be sent; the technical cause is in the server log. */
+const OTP_EMAIL_FAILED_MESSAGE =
+  "We couldn't send the verification email right now. Please try again in a few minutes. If it keeps happening, please contact our team."
+
+const secondsUntilResend = (otpSentAt: Date) =>
+  Math.ceil((OTP_RESEND_COOLDOWN_MS - (Date.now() - otpSentAt.getTime())) / 1000)
+
+/**
+ * Mails the code. When sending fails the pending record is released from the cooldown, so the person can
+ * try again straight away, and they get a clear message instead of the raw mail error.
+ */
+async function deliverOtp(email: string, otp: string, purpose: 'register' | 'forgot_password') {
+  try {
+    await sendOtpEmail(email, otp, purpose)
+  } catch (error) {
+    authLogger.error({ err: error, email, purpose, msg: 'OTP email could not be sent' })
+    await prisma.pendingUserVerification
+      .update({ where: { email }, data: { otpSentAt: new Date(0) } })
+      .catch(() => undefined)
+    throw new AppError(OTP_EMAIL_FAILED_MESSAGE, 503)
   }
 }
 
@@ -50,14 +71,22 @@ export async function registerUser(input: RegisterInput) {
     throw new Error('Email is already registered as staff')
   }
 
-  const pending = await prisma.pendingUserVerification.findUnique({
-    where: { email },
-  })
-  if (pending) {
-    assertOtpCooldown(pending.otpSentAt, 'requesting another verification code')
+  const hashedPassword = await hashPassword(password)
+
+  const existingPending = await prisma.pendingUserVerification.findUnique({ where: { email } })
+  if (
+    existingPending &&
+    existingPending.purpose === 'register' &&
+    secondsUntilResend(existingPending.otpSentAt) > 0
+  ) {
+    // Same person pressing Register again: keep the code that was just sent instead of mailing another one.
+    await prisma.pendingUserVerification.update({
+      where: { email },
+      data: { name, password: hashedPassword },
+    })
+    return { email, name }
   }
 
-  const hashedPassword = await hashPassword(password)
   const otp = generateOTP()
 
   await prisma.pendingUserVerification.upsert({
@@ -81,7 +110,7 @@ export async function registerUser(input: RegisterInput) {
     },
   })
 
-  await sendOtpEmail(email, otp, 'register')
+  await deliverOtp(email, otp, 'register')
 
   return { email, name }
 }
@@ -185,7 +214,13 @@ export async function resendOtp(email: string) {
     throw new Error('No active verification process for this email')
   }
 
-  assertOtpCooldown(pending.otpSentAt, 'requesting another OTP')
+  const waitSeconds = secondsUntilResend(pending.otpSentAt)
+  if (waitSeconds > 0) {
+    throw new AppError(
+      `Please wait ${waitSeconds} seconds before requesting another code, and check your inbox and spam folder first.`,
+      429,
+    )
+  }
 
   const newOtp = generateOTP()
 
@@ -198,7 +233,7 @@ export async function resendOtp(email: string) {
     },
   })
 
-  await sendOtpEmail(email, newOtp, pending.purpose as 'register' | 'forgot_password')
+  await deliverOtp(email, newOtp, pending.purpose as 'register' | 'forgot_password')
 
   return { email }
 }
@@ -209,11 +244,15 @@ export async function forgotPassword(email: string) {
     throw new Error('Email not found')
   }
 
-  const pending = await prisma.pendingUserVerification.findUnique({
-    where: { email },
-  })
-  if (pending) {
-    assertOtpCooldown(pending.otpSentAt, 'requesting another OTP')
+  const existingPending = await prisma.pendingUserVerification.findUnique({ where: { email } })
+  if (
+    existingPending &&
+    existingPending.purpose === 'forgot_password' &&
+    secondsUntilResend(existingPending.otpSentAt) > 0
+  ) {
+    // A reset code was mailed a moment ago: do not send another one.
+    return { email }
+  }
   }
 
   const otp = generateOTP()
@@ -235,7 +274,7 @@ export async function forgotPassword(email: string) {
     },
   })
 
-  await sendOtpEmail(email, otp, 'forgot_password')
+  await deliverOtp(email, otp, 'forgot_password')
 
   return { email }
 }
