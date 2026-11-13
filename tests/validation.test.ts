@@ -170,3 +170,15 @@ test('validateRequest middleware returns 400 with specific error message on fail
   )
   assert.equal(responsePayload.errors.length, 2)
 })
+
+test('formatZodIssue prevents internal SQL query or table name leakage', () => {
+  const issueWithSql: z.ZodIssue = {
+    code: 'custom',
+    path: ['searchQuery'],
+    message: 'syntax error at or near SELECT * FROM "master_team_code"',
+  }
+  assert.equal(
+    formatZodIssue(issueWithSql),
+    'searchQuery: Invalid value',
+  )
+})
