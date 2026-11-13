@@ -69,6 +69,14 @@ REST API documentation for **SxC International Summit 2026** backend system.
       name: 'Admin - Google Drive Storage',
       description: 'Google Drive OAuth 2.0 authorization setup and callback handler for storage token generation',
     },
+    {
+      name: 'Contact - Inquiries',
+      description: 'Public contact/partnership form submissions and admin inquiry triage',
+    },
+    {
+      name: 'Cron - Scheduled Jobs',
+      description: 'Scheduled maintenance and automation endpoints protected by cron secret',
+    },
   ],
   components: {
     securitySchemes: {
@@ -83,6 +91,12 @@ REST API documentation for **SxC International Summit 2026** backend system.
         in: 'cookie',
         name: 'token',
         description: 'HTTP-Only session cookie containing the JWT authentication token',
+      },
+      cronSecretAuth: {
+        type: 'apiKey',
+        in: 'header',
+        name: 'x-cron-secret',
+        description: 'Provide the secret header `x-cron-secret` matching CRON_SECRET configured in .env',
       },
     },
     schemas: {
@@ -1522,6 +1536,40 @@ REST API documentation for **SxC International Summit 2026** backend system.
           },
         },
       },
+      patch: {
+        tags: ['Config - Application'],
+        summary: 'Update application configuration (Admin / Cron Secret)',
+        description: 'Dynamically updates application configuration flags (deadlines, slide limits, reminder days) without redeploying. Authorized via Admin JWT or x-cron-secret header.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }, { cronSecretAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  registrationDeadline: { type: 'string', format: 'date-time', example: '2026-11-20T23:59:59+07:00' },
+                  registrationExtendedDeadline: { type: 'string', format: 'date-time', example: '2026-11-30T23:59:59+07:00' },
+                  extendedRegistrationEnabled: { type: 'boolean', example: true },
+                  maxSlidePages: { type: 'integer', example: 5 },
+                  maxSlideSizeMB: { type: 'integer', example: 20 },
+                  deadlineReminderDays: { type: 'integer', example: 3 },
+                  paymentReminderDays: { type: 'integer', example: 2 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Configuration updated successfully.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } },
+          },
+          400: { description: 'Bad request or invalid date format.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden - Admin or Cron Secret required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
     },
     '/api/config/reload': {
       post: {
@@ -2039,6 +2087,173 @@ REST API documentation for **SxC International Summit 2026** backend system.
           404: {
             description: 'Team not found.',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+        },
+      },
+    },
+    '/api/auth/google/gdrive-setup': {
+      get: {
+        tags: ['Admin - Google Drive Storage'],
+        summary: 'Initiate Google Drive OAuth setup redirect (Admin)',
+        description: 'Redirects signed-in admin to Google OAuth consent screen with Drive scopes to acquire offline refresh token.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        responses: {
+          302: { description: 'Redirects to Google OAuth authorization endpoint.' },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden - Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/contact': {
+      post: {
+        tags: ['Contact - Inquiries'],
+        summary: 'Submit partnership or sponsorship inquiry',
+        description: 'Public contact form submission for partners, sponsors, and general inquiries. Includes bot honeypot protection.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name', 'organization', 'email', 'type', 'message'],
+                properties: {
+                  name: { type: 'string', minLength: 2, maxLength: 100, example: 'Alex Smith' },
+                  organization: { type: 'string', minLength: 2, maxLength: 150, example: 'Tech Corp' },
+                  email: { type: 'string', format: 'email', example: 'alex@techcorp.com' },
+                  type: {
+                    type: 'string',
+                    enum: ['Sponsorship', 'Media Partner', 'Community Partner', 'Case Collaborator', 'Other'],
+                    example: 'Sponsorship',
+                  },
+                  message: { type: 'string', minLength: 10, maxLength: 2000, example: 'We would love to discuss sponsorship opportunities for IBCC 2026.' },
+                  website: { type: 'string', description: 'Bot honeypot field. Leave empty for real submissions.', example: '' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'Inquiry submitted successfully.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } },
+          },
+          400: {
+            description: 'Validation error.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiValidationErrorResponse' } } },
+          },
+          429: {
+            description: 'Rate limit exceeded.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+        },
+      },
+      get: {
+        tags: ['Contact - Inquiries'],
+        summary: 'List contact inquiries (Admin)',
+        description: 'Paginated list of received partner and sponsor inquiries for staff triage.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        parameters: [
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['NEW', 'READ', 'ARCHIVED'] }, description: 'Filter by message status' },
+          { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
+          { name: 'pageSize', in: 'query', schema: { type: 'integer', default: 50, maximum: 100 } },
+        ],
+        responses: {
+          200: {
+            description: 'List of inquiries retrieved.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } },
+          },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden - Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/contact/{id}': {
+      patch: {
+        tags: ['Contact - Inquiries'],
+        summary: 'Update contact inquiry status (Admin)',
+        description: 'Allows committee staff to mark inquiries as READ, ARCHIVED, or NEW.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'integer' }, description: 'Contact inquiry ID' },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['status'],
+                properties: {
+                  status: { type: 'string', enum: ['NEW', 'READ', 'ARCHIVED'], example: 'READ' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Inquiry status updated successfully.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } },
+          },
+          400: { description: 'Validation error.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiValidationErrorResponse' } } } },
+          401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          403: { description: 'Forbidden - Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          404: { description: 'Contact inquiry not found.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/cron/email-scheduler': {
+      get: {
+        tags: ['Cron - Scheduled Jobs'],
+        summary: 'Trigger scheduled email reminders via cron webhook',
+        description: 'Triggers deadline and payment reminder emails for participants. Requires x-cron-secret header.',
+        security: [{ cronSecretAuth: [] }],
+        responses: {
+          200: {
+            description: 'Email scheduler executed successfully.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } },
+          },
+          401: { description: 'Invalid or missing cron secret.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          500: { description: 'Execution failed.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/api/cron/token-cleanup': {
+      get: {
+        tags: ['Cron - Scheduled Jobs'],
+        summary: 'Trigger token blacklist cleanup via cron webhook',
+        description: 'Purges expired blacklisted JWT tokens from database. Requires x-cron-secret header.',
+        security: [{ cronSecretAuth: [] }],
+        responses: {
+          200: {
+            description: 'Token cleanup executed successfully.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } },
+          },
+          401: { description: 'Invalid or missing cron secret.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+          500: { description: 'Execution failed.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
+        },
+      },
+    },
+    '/health': {
+      get: {
+        tags: ['Config - Application'],
+        summary: 'Server health check',
+        description: 'Basic health check returning uptime and status.',
+        responses: {
+          200: {
+            description: 'Server is healthy.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    status: { type: 'string', example: 'healthy' },
+                    timestamp: { type: 'string', format: 'date-time' },
+                    uptime: { type: 'number', example: 124.5 },
+                  },
+                },
+              },
+            },
           },
         },
       },
