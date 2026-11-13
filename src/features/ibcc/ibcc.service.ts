@@ -119,7 +119,10 @@ export async function registerTeam(
       where: { code: 'PENDING_PAYMENT' },
     });
     if (!pendingPaymentStatus) {
-      pendingPaymentStatus = await tx.status.findFirst();
+      pendingPaymentStatus = await tx.status.findFirst({ where: { id: 15 } });
+    }
+    if (!pendingPaymentStatus) {
+      throw new Error('Registration status configuration error: PENDING_PAYMENT status not found.');
     }
 
     await tx.user.update({
@@ -137,7 +140,7 @@ export async function registerTeam(
         code: selectedCodeRecord.code,
         leaderId: leaderUser.id,
         programId: ibccProgram.id,
-        status: pendingPaymentStatus?.id ?? 15,
+        status: pendingPaymentStatus.id,
         memberComposition: input.memberComposition,
         sourceInfo: input.sourceInfo,
       },

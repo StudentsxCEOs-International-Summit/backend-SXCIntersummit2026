@@ -38,7 +38,7 @@ const SESSION_MESSAGE = /\bjwt\b|invalid signature|TokenExpiredError|JsonWebToke
  * Messages written for people ("Email is already registered") never match.
  */
 const TECHNICAL_MESSAGE =
-  /prisma|invocation|ERR_[A-Z_]+|Unique constraint|Foreign key|ECONN|ETIMEDOUT|\bselect\b.+\bfrom\b|\binsert into\b|relation ".+" does not exist|column .+ does not exist|Cannot read propert|is not a function|is not defined|Unexpected token|\b(Type|Reference|Syntax)Error\b|Failed to send email|SMTP|EAUTH|ESOCKET|Invalid login|gaxios|invalid_grant|googleapis|node_modules|not configured|is not set|Google Drive|Drive account|folder ID|Local copy|no account is available|[A-Za-z]:\x5c|\.(ts|js):\d+|\n\s+at /i
+  /prisma|invocation|ERR_[A-Z_]+|Unique constraint|Foreign key|ECONN|ETIMEDOUT|\bselect\b.+\bfrom\b|\binsert\s+into\b|\bupdate\b.+\bset\b|\bdelete\s+from\b|relation ".+" does not exist|table ".+" does not exist|column .+ does not exist|syntax error at or near|invalid input syntax|violates (not-null|foreign key|unique|check) constraint|transaction.*aborted|deadlock detected|Cannot read propert|is not a function|is not defined|Unexpected token|\b(Type|Reference|Syntax)Error\b|Failed to send email|SMTP|EAUTH|ESOCKET|Invalid login|gaxios|invalid_grant|googleapis|node_modules|not configured|is not set|Google Drive|Drive account|folder ID|Local copy|no account is available|[A-Za-z]:\x5c|\.(ts|js):\d+|\n\s+at /i
 
 // Bare "something failed" texts carry no help for a visitor, so they get the friendly message too.
 const GENERIC_SERVER_MESSAGE = /^(internal server error|database operation failed)$/i
@@ -78,9 +78,8 @@ export function fail(
     sanitized = true
   }
 
-  // Technical detail is only echoed while developing; production never sends it.
-  // The one thing that stays in production is the request id, so the team can find the log line.
-  if (process.env.NODE_ENV === 'production' && (sanitized || finalStatus >= 500)) {
+  // Technical details are never sent to clients when an error has been sanitized.
+  if (sanitized || (process.env.NODE_ENV === 'production' && finalStatus >= 500)) {
     const reqId = (finalErrors as { reqId?: unknown } | null | undefined)?.reqId
     finalErrors = typeof reqId === 'string' ? { reqId } : undefined
   }

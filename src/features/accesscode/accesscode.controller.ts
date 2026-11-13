@@ -42,6 +42,7 @@ export async function generateAccessCode(req: AuthRequest, res: Response) {
 
     // Send email notification about access code
     await notifyStatusChange(teamId, "ACCESS_CODE_GENERATED", "access_code");
+    accessCodeLogger.info({ teamId, expiresAt: accessCode.expiresAt }, "Access code generated successfully");
 
     return ok(
       res,

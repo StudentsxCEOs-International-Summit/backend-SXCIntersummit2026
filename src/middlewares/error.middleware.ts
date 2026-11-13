@@ -13,6 +13,7 @@ import {
 } from '../utils/response'
 import { env } from '../configs/env'
 import { logger } from '../configs/logger'
+import { formatZodError } from '../utils/validation'
 
 // Prisma codes for "database unreachable / timed out / connection dropped / pool exhausted".
 const DB_CONNECTION_CODES = new Set(['P1001', 'P1002', 'P1008', 'P1017', 'P2024'])
@@ -71,8 +72,9 @@ export function errorHandler(
   const reqId = (req as any).id || (req.headers['x-request-id'] as string) || 'unknown'
 
   if (err instanceof ZodError) {
-    logger.warn({ context: 'VALIDATION', reqId, issues: err.issues, msg: 'Request input validation failed' })
-    return badRequest(res, 'Validation error', err.issues)
+    const message = formatZodError(err.issues)
+    logger.warn({ context: 'VALIDATION', reqId, issues: err.issues, msg: message })
+    return badRequest(res, message, err.issues)
   }
 
   if (isConnectionError(err)) {

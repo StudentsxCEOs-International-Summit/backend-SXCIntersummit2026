@@ -253,6 +253,7 @@ export async function forgotPassword(email: string) {
     // A reset code was mailed a moment ago: do not send another one.
     return { email }
   }
+  }
 
   const otp = generateOTP()
 

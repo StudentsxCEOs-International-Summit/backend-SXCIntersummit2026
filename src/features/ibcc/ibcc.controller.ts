@@ -80,6 +80,7 @@ export async function registerTeamHandler(req: AuthRequest, res: Response) {
       receivedAt,
     );
 
+    ibccLogger.info({ teamCode: data?.teamCode, teamName: data?.teamName, leaderEmail: leaderUser.email }, 'Team registered successfully for IBCC');
     return ok(res, data, 'Team successfully registered for IBCC 2026!', 201);
   } catch (error: any) {
     cleanupUploadFiles(error, req, res, () => {});
@@ -135,6 +136,7 @@ export async function submitPreliminaryHandler(req: AuthRequest, res: Response) 
     const teamId = req.body.teamId ? Number(req.body.teamId) : undefined;
 
     const data = await submitPreliminarySlideDeck(Number(leaderUser.id), file, teamId, res.locals.receivedAt);
+    ibccLogger.info({ leaderId: leaderUser.id, teamId, filename: file.originalname }, 'Preliminary slide deck submitted successfully');
     return ok(res, data, 'Preliminary slide deck submitted successfully.', 201);
   } catch (error: any) {
     if (req.file?.path) {
@@ -163,6 +165,7 @@ export async function submitSemifinalHandler(req: AuthRequest, res: Response) {
     const teamId = req.body.teamId ? Number(req.body.teamId) : undefined;
     const data = await submitSemifinalSlideDeck(Number(leaderUser.id), file, teamId, res.locals.receivedAt);
 
+    ibccLogger.info({ leaderId: leaderUser.id, teamId }, 'Semifinal slide deck submitted successfully');
     return ok(res, data, 'Semifinal slide deck submitted successfully.', 201);
   } catch (error: any) {
     if (req.file?.path) {
@@ -195,6 +198,7 @@ export async function submitPaymentHandler(req: AuthRequest, res: Response) {
     const teamId = req.body.teamId ? Number(req.body.teamId) : undefined;
     const data = await submitPaymentProof(Number(leaderUser.id), file, teamId, res.locals.receivedAt);
 
+    ibccLogger.info({ leaderId: leaderUser.id, teamId }, 'Payment proof submitted successfully');
     return ok(res, data, 'Payment proof received and is being processed.', 201);
   } catch (error: any) {
     if (req.file?.path) {
@@ -250,6 +254,7 @@ export async function publishResultsHandler(req: AuthRequest, res: Response) {
   try {
     const { qualifiedTeamIds } = req.body as PublishResultsInput;
     const result = await publishResults(qualifiedTeamIds);
+    ibccLogger.info({ qualifiedCount: result.qualified.length, eliminatedCount: result.eliminated.length }, 'IBCC results published');
 
     return ok(
       res,
