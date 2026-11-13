@@ -42,6 +42,10 @@ REST API documentation for **SxC International Summit 2026** backend system.
       description: 'Participant login, staff/admin login, token revocation (logout), and active user profile',
     },
     {
+      name: 'Auth - Google OAuth',
+      description: 'Google Single Sign-On (SSO) login flow, consent redirect, and authorization callback handler',
+    },
+    {
       name: 'IBCC - Team Registration & Management',
       description: 'Team registration and team profile dashboard with competition stage status',
     },
@@ -1191,6 +1195,46 @@ REST API documentation for **SxC International Summit 2026** backend system.
                           },
                         },
                       },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          401: {
+            description: 'Unauthorized access (missing token, revoked token, or expired token).',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ApiErrorResponse' },
+                examples: {
+                  NoTokenProvided: {
+                    summary: 'Missing authentication token',
+                    value: {
+                      success: false,
+                      message: 'Unauthorized, no token provided',
+                    },
+                  },
+                  TokenRevoked: {
+                    summary: 'Token has already been blacklisted / logged out',
+                    value: {
+                      success: false,
+                      message: 'Token has been revoked',
+                    },
+                  },
+                  InvalidOrExpiredToken: {
+                    summary: 'Token signature invalid or expired naturally',
+                    value: {
+                      success: false,
+                      message: 'Invalid or expired token',
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     '/api/auth/google': {
       get: {
         tags: ['Auth - Google OAuth'],
@@ -1272,46 +1316,6 @@ REST API documentation for **SxC International Summit 2026** backend system.
             content: {
               'application/json': {
                 schema: { $ref: '#/components/schemas/ApiErrorResponse' },
-              },
-            },
-          },
-        },
-      },
-    },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          401: {
-            description: 'Unauthorized access (missing token, revoked token, or expired token).',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/ApiErrorResponse' },
-                examples: {
-                  NoTokenProvided: {
-                    summary: 'Missing authentication token',
-                    value: {
-                      success: false,
-                      message: 'Unauthorized, no token provided',
-                    },
-                  },
-                  TokenRevoked: {
-                    summary: 'Token has already been blacklisted / logged out',
-                    value: {
-                      success: false,
-                      message: 'Token has been revoked',
-                    },
-                  },
-                  InvalidOrExpiredToken: {
-                    summary: 'Token signature invalid or expired naturally',
-                    value: {
-                      success: false,
-                      message: 'Invalid or expired token',
-                    },
-                  },
-                },
               },
             },
           },
