@@ -80,7 +80,7 @@ export async function registerTeamHandler(req: AuthRequest, res: Response) {
       receivedAt,
     );
 
-    ibccLogger.info({ teamCode: data?.code, teamName: data?.name, leaderEmail: leaderUser.email }, 'Team registered successfully for IBCC');
+    ibccLogger.info({ teamCode: data?.teamCode, teamName: data?.teamName, leaderEmail: leaderUser.email }, 'Team registered successfully for IBCC');
     return ok(res, data, 'Team successfully registered for IBCC 2026!', 201);
   } catch (error: any) {
     cleanupUploadFiles(error, req, res, () => {});
