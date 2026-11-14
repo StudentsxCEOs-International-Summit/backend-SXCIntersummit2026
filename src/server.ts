@@ -14,6 +14,7 @@ import { swaggerSpec, swaggerUiOptions } from './docs/swagger'
 import { startTokenCleanupJob } from './jobs/token-cleanup.job'
 import { startEmailSchedulerJob } from './jobs/email-scheduler.job'
 import { startDriveUploadWorker } from './jobs/drive-upload.job'
+import { startMailBounceWatcher } from './jobs/mail-bounce.job'
 import routes from './routes'
 import path from 'path'
 
@@ -106,6 +107,7 @@ if (env.NODE_ENV !== 'test') {
   startTokenCleanupJob()
   startEmailSchedulerJob()
   startDriveUploadWorker()
+  startMailBounceWatcher()
 
   const server = app.listen(env.PORT, () => {
     logger.info({

@@ -13,11 +13,22 @@ export interface SendMailOptions {
   /** Extra mail headers (e.g. marking an automatic message). */
   headers?: Record<string, string>;
   attachments?: nodemailer.SendMailOptions["attachments"];
+  /**
+   * Gmail sometimes accepts a mail and only later bounces it as "suspicious" / "Message blocked", so the
+   * send itself looks fine. With this set (and a second account configured) the mail is remembered until
+   * `expiresAt`, and the bounce watcher (jobs/mail-bounce.job.ts) resends it through the other account.
+   */
+  retryOnBlock?: { expiresAt: number };
+  /** Accounts not to use for this mail (the ones that already had it bounced). */
+  excludeSenders?: string[];
 }
 
 
 interface MailSender {
   name: string;
+  /** SMTP login, also used by the bounce watcher to read this account's inbox over IMAP. */
+  user: string;
+  pass: string;
   from: string;
   transporter: nodemailer.Transporter;
   /** Timestamps of mails sent in the last 24 hours, used to rotate before Gmail's daily cap. */
@@ -74,6 +85,8 @@ function getSenders(): MailSender[] {
     .filter((a) => a.user && a.pass)
     .map((a) => ({
       name: a.name,
+      user: a.user!,
+      pass: a.pass!,
       from: a.from,
       transporter: createTransport(a.user!, a.pass!),
       sentAt: [],
@@ -90,17 +103,108 @@ export function getMailTransporter(): nodemailer.Transporter | null {
   return getSenders()[0]?.transporter ?? null;
 }
 
+/** The configured SMTP accounts, for the bounce watcher that reads their inboxes. */
+export function getMailAccounts(): { name: string; user: string; pass: string }[] {
+  return getSenders().map(({ name, user, pass }) => ({ name, user, pass }));
+}
+
+/** A mail that can still be resent through another account if it bounces as blocked. */
+export interface TrackedMail {
+  messageId: string;
+  to: string;
+  /** The account that sent this copy. */
+  sender: string;
+  /** Every account that already sent (and may have had bounced) this mail. */
+  triedSenders: string[];
+  options: SendMailOptions;
+  expiresAt: number;
+}
+
+const trackedMails = new Map<string, TrackedMail>();
+
+const normalizeMessageId = (id: string) => id.trim().replace(/^<|>$/g, "").toLowerCase();
+
+function pruneTrackedMails(now = Date.now()) {
+  for (const [id, mail] of trackedMails) {
+    if (mail.expiresAt <= now) trackedMails.delete(id);
+  }
+}
+
+function trackMail(mail: TrackedMail) {
+  pruneTrackedMails();
+  trackedMails.set(normalizeMessageId(mail.messageId), mail);
+}
+
+/**
+ * Finds the mail a bounce is about: by the original Message-ID when the bounce carries it, otherwise the
+ * latest tracked mail from that account to the failed recipient.
+ */
+export function findTrackedMail(match: {
+  sender: string;
+  messageIds: string[];
+  recipients: string[];
+}): TrackedMail | undefined {
+  pruneTrackedMails();
+  for (const id of match.messageIds) {
+    const mail = trackedMails.get(normalizeMessageId(id));
+    if (mail && mail.sender === match.sender) return mail;
+  }
+  const recipients = new Set(match.recipients.map((r) => r.toLowerCase()));
+  let latest: TrackedMail | undefined;
+  for (const mail of trackedMails.values()) {
+    if (mail.sender !== match.sender || !recipients.has(mail.to.toLowerCase())) continue;
+    if (!latest || mail.expiresAt >= latest.expiresAt) latest = mail;
+  }
+  return latest;
+}
+
+/** Forgets a tracked mail (its bounce was handled, or it is not worth resending). */
+export function forgetTrackedMail(mail: TrackedMail) {
+  trackedMails.delete(normalizeMessageId(mail.messageId));
+}
+
+/** Resending this close to the expiry is pointless: the code would be dead before it is read. */
+const MIN_USEFUL_REMAINING_MS = 30_000;
+
+export type ResendOutcome =
+  | { status: "resent"; sender: string }
+  | { status: "expired" }
+  | { status: "no-account-left" }
+  | { status: "failed"; error: string };
+
+/** Sends a bounced mail again through an account that has not tried it yet. */
+export async function resendThroughOtherAccount(mail: TrackedMail): Promise<ResendOutcome> {
+  forgetTrackedMail(mail);
+  if (mail.expiresAt - Date.now() < MIN_USEFUL_REMAINING_MS) return { status: "expired" };
+
+  const remaining = getSenders().filter((s) => !mail.triedSenders.includes(s.name));
+  if (remaining.length === 0) return { status: "no-account-left" };
+
+  try {
+    const result = await sendMail({
+      ...mail.options,
+      excludeSenders: mail.triedSenders,
+      retryOnBlock: { expiresAt: mail.expiresAt },
+    });
+    return { status: "resent", sender: result.sender ?? remaining[0].name };
+  } catch (error) {
+    return { status: "failed", error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 const sentInLastDay = (sender: MailSender, now: number) => {
   sender.sentAt = sender.sentAt.filter((t) => now - t < DAY_MS);
   return sender.sentAt.length;
 };
 
 /** Takes turns between accounts, and leaves an account alone once it nears its daily cap. */
-function senderOrder(all: MailSender[]): MailSender[] {
+function senderOrder(all: MailSender[], exclude: string[] = []): MailSender[] {
   const now = Date.now();
   const limit = env.SMTP_DAILY_LIMIT ?? 450;
   const turn = rotation++;
-  const rotated = all.map((_, i) => all[(turn + i) % all.length]);
+  const rotated = all
+    .map((_, i) => all[(turn + i) % all.length])
+    .filter((s) => !exclude.includes(s.name));
   const underCap = rotated.filter((s) => sentInLastDay(s, now) < limit);
   if (underCap.length > 0) return underCap;
   // Everyone is past the soft cap: still try, least used first, rather than refuse to send.
@@ -129,7 +233,7 @@ export function classifyMailError(error: unknown): number | null {
 
 export async function sendMail(
   options: SendMailOptions,
-): Promise<{ success: boolean; messageId?: string }> {
+): Promise<{ success: boolean; messageId?: string; sender?: string }> {
   const all = getSenders();
 
   if (all.length === 0) {
@@ -143,7 +247,7 @@ export async function sendMail(
 
   try {
     const { info, sender } = await senderPool!.run(
-      senderOrder(all),
+      senderOrder(all, options.excludeSenders),
       async (candidate) => ({
         sender: candidate,
         info: await candidate.transporter.sendMail({
@@ -161,7 +265,20 @@ export async function sendMail(
 
     sender.sentAt.push(Date.now());
     mailLogger.info({ to: options.to, sender: sender.name, messageId: info.messageId }, "Email sent successfully");
-    return { success: true, messageId: info.messageId };
+
+    if (options.retryOnBlock && all.length > 1 && info.messageId) {
+      const { retryOnBlock, excludeSenders, ...mailOptions } = options;
+      trackMail({
+        messageId: info.messageId,
+        to: options.to,
+        sender: sender.name,
+        triedSenders: [...(excludeSenders ?? []), sender.name],
+        options: mailOptions,
+        expiresAt: retryOnBlock.expiresAt,
+      });
+    }
+
+    return { success: true, messageId: info.messageId, sender: sender.name };
   } catch (error: any) {
     mailLogger.error({ err: error, to: options.to }, "Failed to send email");
     throw new Error(`Failed to send email: ${error.message}`);
@@ -268,6 +385,9 @@ export function renderEmailTemplate({
 </html>`;
 }
 
+/** Matches OTP_EXPIRY_MS in auth.service and the "valid for 5 minutes" in the mail. */
+const OTP_VALID_MS = 5 * 60 * 1000;
+
 export async function sendOtpEmail(
   email: string,
   otp: string,
@@ -329,6 +449,8 @@ export async function sendOtpEmail(
     text,
     // Marks it as an automatic, one-to-one message (no auto-replies, not a newsletter).
     headers: { "Auto-Submitted": "auto-generated", "X-Auto-Response-Suppress": "OOF, AutoReply" },
+    // If Gmail bounces it as blocked, resend the same code through the other account while it is valid.
+    retryOnBlock: { expiresAt: Date.now() + OTP_VALID_MS },
   });
 }
 
