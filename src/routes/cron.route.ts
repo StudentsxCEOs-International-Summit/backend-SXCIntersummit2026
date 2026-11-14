@@ -19,8 +19,14 @@ cronRouter.use(requireCronSecret)
 cronRouter.get('/email-scheduler', async (_req: Request, res: Response) => {
   try {
     cronLogger.info('Email scheduler triggered via HTTP')
-    const result = await triggerEmailScheduler()
-    return ok(res, result, 'Email scheduler executed successfully')
+    // Runs in the background: reminder mails are spaced about a minute apart, so a run can take a while.
+    const result = triggerEmailScheduler()
+    return ok(
+      res,
+      result,
+      result.started ? 'Email scheduler started in the background' : 'Email scheduler is already running',
+      202,
+    )
   } catch (error: any) {
     cronLogger.error({ err: error }, 'Email scheduler failed')
     return internalError(res, 'Email scheduler failed')

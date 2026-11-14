@@ -38,6 +38,8 @@ const envSchema = z
       .default(true),
     IMAP_HOST: z.string().default("imap.gmail.com"),
     IMAP_PORT: z.coerce.number().int().positive().default(993),
+    /** Seconds between batch mails such as reminders (plus up to 50% jitter). OTP mails never wait. */
+    MAIL_BULK_GAP_SECONDS: z.coerce.number().int().nonnegative().optional(),
     EMAIL_LOGO_URL: z
       .url()
       .default(

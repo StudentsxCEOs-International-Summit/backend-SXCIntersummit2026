@@ -1592,9 +1592,9 @@ REST API documentation for **SxC International Summit 2026** backend system.
       post: {
         tags: ['Config - Application'],
         summary: 'Trigger email scheduler manually',
-        description: 'Manually triggers the email scheduler to send deadline reminders and payment reminders. Can be used as a webhook endpoint for cronjob.org.',
+        description: 'Starts the email scheduler (deadline and payment reminders) in the background and answers right away; reminder mails go out about a minute apart, so a run can take a while. A trigger while a run is in progress is skipped (`alreadyRunning: true`). Can be used as a webhook endpoint for cronjob.org.',
         responses: {
-          200: { description: 'Email scheduler triggered.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+          202: { description: 'Email scheduler started (or already running).', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
         },
       },
     },
@@ -2210,11 +2210,11 @@ REST API documentation for **SxC International Summit 2026** backend system.
       get: {
         tags: ['Cron - Scheduled Jobs'],
         summary: 'Trigger scheduled email reminders via cron webhook',
-        description: 'Triggers deadline and payment reminder emails for participants. Requires x-cron-secret header.',
+        description: 'Starts the deadline and payment reminder emails in the background and answers right away; mails go out about a minute apart. A trigger while a run is in progress is skipped. Requires x-cron-secret header. Not needed if the built-in daily cron (09:00 WIB) is running.',
         security: [{ cronSecretAuth: [] }],
         responses: {
-          200: {
-            description: 'Email scheduler executed successfully.',
+          202: {
+            description: 'Email scheduler started (or already running).',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } },
           },
           401: { description: 'Invalid or missing cron secret.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },

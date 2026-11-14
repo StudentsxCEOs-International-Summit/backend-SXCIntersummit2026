@@ -21,6 +21,12 @@ export interface SendMailOptions {
   retryOnBlock?: { expiresAt: number };
   /** Accounts not to use for this mail (the ones that already had it bounced). */
   excludeSenders?: string[];
+  /**
+   * Part of a batch (reminders, result announcements): waits for its turn so batch mails go out spaced
+   * apart (MAIL_BULK_GAP_SECONDS, default ~1 minute) instead of in one burst, which Gmail treats as
+   * spam. One-to-one mails (OTP, confirmations) leave this off and are never delayed.
+   */
+  bulk?: boolean;
 }
 
 
@@ -231,10 +237,35 @@ export function classifyMailError(error: unknown): number | null {
   return 0; // timeouts, resets and anything unknown: try the other account, keep this one in rotation
 }
 
+let bulkQueue: Promise<void> = Promise.resolve();
+let lastBulkSendAt = 0;
+
+/** Gap before the next batch mail: the configured gap plus up to 50% random jitter. */
+function nextBulkGapMs() {
+  const base = (env.MAIL_BULK_GAP_SECONDS ?? 60) * 1000;
+  return base + Math.random() * base * 0.5;
+}
+
+/**
+ * Resolves when the next batch mail may go out. Batch mails from every caller share one queue, so two
+ * batches running at once still do not add up to a burst.
+ */
+export function waitForBulkSlot(): Promise<void> {
+  const slot = bulkQueue.then(async () => {
+    const wait = lastBulkSendAt + nextBulkGapMs() - Date.now();
+    if (lastBulkSendAt > 0 && wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    lastBulkSendAt = Date.now();
+  });
+  bulkQueue = slot.catch(() => undefined);
+  return slot;
+}
+
 export async function sendMail(
   options: SendMailOptions,
 ): Promise<{ success: boolean; messageId?: string; sender?: string }> {
   const all = getSenders();
+
+  if (options.bulk && all.length > 0) await waitForBulkSlot();
 
   if (all.length === 0) {
     const fromAddress = env.SMTP_FROM || DEFAULT_FROM;
@@ -267,7 +298,7 @@ export async function sendMail(
     mailLogger.info({ to: options.to, sender: sender.name, messageId: info.messageId }, "Email sent successfully");
 
     if (options.retryOnBlock && all.length > 1 && info.messageId) {
-      const { retryOnBlock, excludeSenders, ...mailOptions } = options;
+      const { retryOnBlock, excludeSenders, bulk, ...mailOptions } = options;
       trackMail({
         messageId: info.messageId,
         to: options.to,
@@ -385,6 +416,29 @@ export function renderEmailTemplate({
 </html>`;
 }
 
+/**
+ * A short, personal-looking layout: no remote images, no social links, no banner. Gmail's outbound filter
+ * was holding the branded mails back as suspicious; plain one-to-one style mails get through far better.
+ * Each block becomes a paragraph (HTML allowed), followed by the team signature.
+ */
+export function renderPlainEmail({ title, blocksHtml }: { title: string; blocksHtml: string[] }): string {
+  const paragraphs = blocksHtml.map((block) => `    <p style="margin: 0 0 16px 0;">${block}</p>`).join("\n");
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin: 0; padding: 24px 16px; background-color: #ffffff; font-family: Arial, Helvetica, sans-serif; color: #1e293b; font-size: 15px; line-height: 1.6;">
+  <div style="max-width: 520px; margin: 0 auto;">
+${paragraphs}
+    <p style="margin: 8px 0 0 0;">Best regards,<br>StudentsxCEOs International Summit 2026 Team</p>
+  </div>
+</body>
+</html>`;
+}
+
 /** Matches OTP_EXPIRY_MS in auth.service and the "valid for 5 minutes" in the mail. */
 const OTP_VALID_MS = 5 * 60 * 1000;
 
@@ -405,27 +459,16 @@ export async function sendOtpEmail(
     ? "If you didn't sign up, you can ignore this email and no account will be created."
     : "If you didn't ask to reset your password, you can ignore this email and your password stays the same.";
 
-  // Gmail's outbound filter was holding these mails back as suspicious. A short, personal-looking message
-  // with no remote images, no tracking-style links and no alarm wording reads like the one-to-one
-  // verification mail it is, so the OTP mail stays deliberately plain instead of using the branded layout.
-  const htmlContent = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title}</title>
-</head>
-<body style="margin: 0; padding: 24px 16px; background-color: #ffffff; font-family: Arial, Helvetica, sans-serif; color: #1e293b; font-size: 15px; line-height: 1.6;">
-  <div style="max-width: 520px; margin: 0 auto;">
-    <p style="margin: 0 0 16px 0;">Hi,</p>
-    <p style="margin: 0 0 16px 0;">${intro}</p>
-    <p style="margin: 0 0 16px 0; font-size: 28px; font-weight: 700; letter-spacing: 6px; color: #0f172a;">${otp}</p>
-    <p style="margin: 0 0 16px 0;">The code is valid for 5 minutes. Please keep it to yourself; our team will never ask you for it.</p>
-    <p style="margin: 0 0 24px 0; color: #64748b;">${outro}</p>
-    <p style="margin: 0;">Best regards,<br>StudentsxCEOs International Summit 2026 Team</p>
-  </div>
-</body>
-</html>`;
+  const htmlContent = renderPlainEmail({
+    title,
+    blocksHtml: [
+      "Hi,",
+      intro,
+      `<span style="font-size: 28px; font-weight: 700; letter-spacing: 6px; color: #0f172a;">${otp}</span>`,
+      "The code is valid for 5 minutes. Please keep it to yourself; our team will never ask you for it.",
+      `<span style="color: #64748b;">${outro}</span>`,
+    ],
+  });
 
   const text = [
     "Hi,",
