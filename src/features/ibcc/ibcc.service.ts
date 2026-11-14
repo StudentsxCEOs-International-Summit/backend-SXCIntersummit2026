@@ -13,6 +13,7 @@ import { PENDING_PREFIX, pendingFilePath } from '../../services/storage.service'
 import { enqueueDriveUpload } from '../../jobs/drive-upload.job';
 import {
   renderTeamRegistrationConfirmationEmail,
+  teamRegistrationConfirmationSubject,
   renderPreliminaryEvaluationEmail,
 } from './ibcc.templates';
 import { RegisterTeamInput } from './ibcc.schema';
@@ -299,7 +300,7 @@ export async function registerTeam(
 
   sendMail({
     to: leaderUser.email,
-    subject: `[SXC Intersummit 2026] IBCC registration confirmed: team ${result.team.name}`,
+    subject: teamRegistrationConfirmationSubject(result.team.name),
     html: leaderEmail.html,
     text: leaderEmail.text,
     // This mail carries the WhatsApp group link: if Gmail bounces it as blocked, resend it through the

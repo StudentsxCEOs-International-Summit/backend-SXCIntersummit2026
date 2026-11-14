@@ -1,4 +1,4 @@
-import { renderEmailTemplate, renderPlainEmail } from '../../services/mail.service';
+import { renderEmailTemplate, renderCardEmail, emailBox, emailButton, escapeHtml } from '../../services/mail.service';
 
 export interface RegistrationEmailProps {
   leaderName: string;
@@ -8,53 +8,79 @@ export interface RegistrationEmailProps {
   waGroupLink?: string;
 }
 
+/** Subject of the automatic mail sent when a team submits its registration. */
+export function teamRegistrationConfirmationSubject(teamName: string): string {
+  return `[SXC Intersummit 2026] IBCC registration confirmed: team ${teamName}`;
+}
+
+/** Subject for re-sending the same mail to teams that registered earlier, to get them into the group. */
+export function teamJoinWhatsappReminderSubject(teamName: string): string {
+  return `[SXC Intersummit 2026] Team ${teamName} Is Registered: Please Join the IBCC WhatsApp Group`;
+}
+
 /**
- * Sent to the team leader right after IBCC team registration: confirms the team is in and asks every
- * member to join the preliminary WhatsApp group. Plain layout on purpose (no banner, images or button
- * styling): the branded version of this mail was being blocked by Gmail as suspicious.
+ * Sent to the team leader right after IBCC team registration: confirms the team is in and, most
+ * importantly, asks every member to join the IBCC WhatsApp group. Uses the shared card layout
+ * (renderCardEmail): no remote images or tracking, one destination link, a button that renders in every
+ * mail client, the link also written out, and a full plain-text part.
  */
 export function renderTeamRegistrationConfirmationEmail(props: RegistrationEmailProps): {
   html: string;
   text: string;
 } {
-  const intro = `Your team, ${props.teamName}, is now registered for the International Business Case Competition (IBCC) of StudentsxCEOs International Summit 2026.`;
-  const code = `Your team code is ${props.teamCode}. Please keep it, as it identifies your team throughout the competition.`;
-  const waAsk =
-    'Next step: please join the IBCC 2026 Preliminary WhatsApp group. The case, announcements and Q&A for the preliminary round are shared there, so every member of your team should join:';
-  const share = 'Please also share this link with your teammates.';
+  const leaderName = escapeHtml(props.leaderName);
+  const teamName = escapeHtml(props.teamName);
+  const teamCode = escapeHtml(props.teamCode);
+  const link = props.waGroupLink ? escapeHtml(props.waGroupLink) : '';
 
-  const blocksHtml = [
-    `Hi ${props.leaderName},`,
-    intro,
-    `Your team code is <strong>${props.teamCode}</strong>. Please keep it, as it identifies your team throughout the competition.`,
-    ...(props.waGroupLink
-      ? [
-          `<strong>Next step:</strong> please join the IBCC 2026 Preliminary WhatsApp group. The case, announcements and Q&amp;A for the preliminary round are shared there, so every member of your team should join:`,
-          `<a href="${props.waGroupLink}" style="color: #2563eb;">${props.waGroupLink}</a>`,
-          share,
-        ]
-      : []),
-    'Rules, timeline and formatting criteria are in the Competition Booklet and Guidebook in the registration kit.',
-  ];
+  const waSection = link
+    ? emailBox(
+        `<p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #15803d;">Important: next step</p>
+                <p style="margin: 0 0 10px 0; font-size: 19px; font-weight: 700; line-height: 1.35; color: #14532d;">Join the IBCC 2026 WhatsApp group</p>
+                <p style="margin: 0 0 18px 0; font-size: 14px; line-height: 1.6; color: #166534;">Announcements and other important information about IBCC 2026 will be shared in this group, so <strong>every member of your team needs to join</strong>. Please share this link with your teammates too.</p>
+                ${emailButton(props.waGroupLink!, 'Join the WhatsApp Group')}
+                <p style="margin: 14px 0 0 0; font-size: 12px; line-height: 1.5; color: #4b5563;">Button not working? Open this link: <a href="${link}" style="color: #15803d; word-break: break-all;">${link}</a></p>`,
+        'green',
+      )
+    : '';
+
+  const html = renderCardEmail({
+    title: 'IBCC 2026 registration confirmed',
+    heading: 'Your team is registered for IBCC 2026',
+    sections: [
+      `<p style="margin: 0 0 12px 0;">Hi ${leaderName},</p><p style="margin: 0;">We have received your registration. Your team, <strong>${teamName}</strong>, is now officially registered for the International Business Case Competition (IBCC) 2026.</p>`,
+      ...(waSection ? [waSection] : []),
+      emailBox(
+        `<p style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #64748b;">Your team code</p>
+                <p style="margin: 4px 0 4px 0; font-size: 26px; font-weight: 700; letter-spacing: 4px; color: #0a3fa8;">${teamCode}</p>
+                <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #475569;">Keep this code: it identifies your team throughout the competition.</p>`,
+      ),
+      `<p style="margin: 0; font-size: 14px; color: #475569;">Rules, timeline and formatting criteria are in the Competition Booklet and Guidebook in the registration kit. You can follow your team's progress on the My Team page of the website.</p>`,
+    ],
+  });
 
   const text = [
     `Hi ${props.leaderName},`,
     '',
-    intro,
+    `We have received your registration. Your team, ${props.teamName}, is now officially registered for the International Business Case Competition (IBCC) 2026.`,
+    ...(props.waGroupLink
+      ? [
+          '',
+          'IMPORTANT, NEXT STEP: join the IBCC 2026 WhatsApp group.',
+          'Announcements and other important information about IBCC 2026 will be shared in this group, so every member of your team needs to join. Please share this link with your teammates too:',
+          props.waGroupLink,
+        ]
+      : []),
     '',
-    code,
-    ...(props.waGroupLink ? ['', waAsk, props.waGroupLink, '', share] : []),
+    `Your team code: ${props.teamCode} (keep it: it identifies your team throughout the competition).`,
     '',
-    'Rules, timeline and formatting criteria are in the Competition Booklet and Guidebook in the registration kit.',
+    "Rules, timeline and formatting criteria are in the Competition Booklet and Guidebook in the registration kit. You can follow your team's progress on the My Team page of the website.",
     '',
     'Best regards,',
     'StudentsxCEOs International Summit 2026 Team',
   ].join('\n');
 
-  return {
-    html: renderPlainEmail({ title: 'IBCC 2026 registration confirmed', blocksHtml }),
-    text,
-  };
+  return { html, text };
 }
 
 export interface MemberInvitationProps {

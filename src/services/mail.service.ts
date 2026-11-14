@@ -442,6 +442,74 @@ ${paragraphs}
 </html>`;
 }
 
+/** Escapes text typed by people (names, team names) before it goes into a mail's HTML. */
+export const escapeHtml = (value: string) =>
+  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/**
+ * The designed layout for one-to-one mails (OTP, team confirmation): a white card with a small brand label,
+ * a heading, the given sections and the team signature. It stays Spam-safe on purpose: no remote images,
+ * no tracking, table-based markup that Gmail, Outlook and phones all render, and no hidden text. Each
+ * section is HTML placed in its own row; use `emailBox` for highlighted panels and `emailButton` for links.
+ */
+export function renderCardEmail({ title, heading, sections }: { title: string; heading: string; sections: string[] }): string {
+  const rows = sections
+    .map((section) => `
+          <tr>
+            <td style="padding: 0 32px 18px 32px; font-size: 15px; line-height: 1.6; color: #1e293b;">${section}</td>
+          </tr>`)
+    .join("");
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: Arial, Helvetica, sans-serif; color: #1e293b;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f1f5f9;">
+    <tr>
+      <td align="center" style="padding: 28px 12px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 560px; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px;">
+          <tr>
+            <td style="padding: 26px 32px 18px 32px;">
+              <p style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #0a60f5;">StudentsxCEOs International Summit 2026</p>
+              <h1 style="margin: 8px 0 0 0; font-size: 22px; line-height: 1.3; color: #0f172a;">${heading}</h1>
+            </td>
+          </tr>${rows}
+          <tr>
+            <td style="padding: 4px 32px 28px 32px; font-size: 14px; line-height: 1.6; color: #1e293b;">Best regards,<br>StudentsxCEOs International Summit 2026 Team</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+/** A highlighted panel inside `renderCardEmail` (e.g. the code, or the step people must not miss). */
+export function emailBox(innerHtml: string, tone: "blue" | "green" = "blue"): string {
+  const style =
+    tone === "green"
+      ? "background-color: #ecfdf3; border: 2px solid #25d366;"
+      : "background-color: #f1f6ff; border: 1px solid #dbe7ff;";
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="${style} border-radius: 12px;">
+                <tr><td style="padding: 18px 22px;">${innerHtml}</td></tr>
+              </table>`;
+}
+
+/** A button that renders in every mail client (a table cell, not an image or a CSS-only trick). */
+export function emailButton(href: string, label: string, color = "#25d366"): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td align="center" bgcolor="${color}" style="border-radius: 8px;">
+                      <a href="${href}" target="_blank" style="display: inline-block; padding: 14px 28px; font-size: 16px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 8px;">${label}</a>
+                    </td>
+                  </tr>
+                </table>`;
+}
+
 /**
  * Codes can land in Spam while the sending account builds reputation; "Not spam" from recipients is what
  * moves the next mails to the inbox. (The "can take up to 60 seconds" hint lives on the OTP page.)
@@ -457,6 +525,21 @@ export async function sendOtpEmail(
   otp: string,
   purpose: "register" | "forgot_password",
 ) {
+  const { subject, html, text } = buildOtpEmail(otp, purpose);
+  return await sendMail({
+    to: email,
+    subject,
+    html,
+    text,
+    // Marks it as an automatic, one-to-one message (no auto-replies, not a newsletter).
+    headers: { "Auto-Submitted": "auto-generated", "X-Auto-Response-Suppress": "OOF, AutoReply" },
+    // If Gmail bounces it as blocked, resend the same code through the other account while it is valid.
+    retryOnBlock: { expiresAt: Date.now() + OTP_VALID_MS },
+  });
+}
+
+/** Subject, HTML and plain text of the OTP mail (separate from sending, so it can be previewed). */
+export function buildOtpEmail(otp: string, purpose: "register" | "forgot_password") {
   const isRegister = purpose === "register";
   const title = isRegister
     ? "Your verification code"
@@ -469,15 +552,18 @@ export async function sendOtpEmail(
     ? "If you didn't sign up, you can ignore this email and no account will be created."
     : "If you didn't ask to reset your password, you can ignore this email and your password stays the same.";
 
-  const htmlContent = renderPlainEmail({
+  const htmlContent = renderCardEmail({
     title,
-    blocksHtml: [
-      "Hi,",
-      intro,
-      `<span style="font-size: 28px; font-weight: 700; letter-spacing: 6px; color: #0f172a;">${otp}</span>`,
-      "The code is valid for 5 minutes. Please keep it to yourself; our team will never ask you for it.",
-      SPAM_NOTE,
-      `<span style="color: #64748b;">${outro}</span>`,
+    heading: isRegister ? "Verify your email address" : "Reset your password",
+    sections: [
+      `<p style="margin: 0 0 12px 0;">Hi,</p><p style="margin: 0;">${intro}</p>`,
+      emailBox(
+        `<p style="margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #64748b;">Your ${isRegister ? "verification" : "reset"} code</p>
+                <p style="margin: 6px 0 6px 0; font-size: 32px; font-weight: 700; letter-spacing: 8px; color: #0a3fa8;">${otp}</p>
+                <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #475569;">Valid for 5 minutes. Please keep it to yourself; our team will never ask you for it.</p>`,
+      ),
+      `<p style="margin: 0; font-size: 13px; line-height: 1.6; color: #64748b;">${SPAM_NOTE}</p>`,
+      `<p style="margin: 0; font-size: 13px; line-height: 1.6; color: #64748b;">${outro}</p>`,
     ],
   });
 
@@ -498,16 +584,7 @@ export async function sendOtpEmail(
     "StudentsxCEOs International Summit 2026 Team",
   ].join("\n");
 
-  return await sendMail({
-    to: email,
-    subject,
-    html: htmlContent,
-    text,
-    // Marks it as an automatic, one-to-one message (no auto-replies, not a newsletter).
-    headers: { "Auto-Submitted": "auto-generated", "X-Auto-Response-Suppress": "OOF, AutoReply" },
-    // If Gmail bounces it as blocked, resend the same code through the other account while it is valid.
-    retryOnBlock: { expiresAt: Date.now() + OTP_VALID_MS },
-  });
+  return { subject, html: htmlContent, text };
 }
 
 export async function sendTestEmail(to: string) {
