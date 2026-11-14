@@ -219,13 +219,13 @@ function senderOrder(all: MailSender[], exclude: string[] = []): MailSender[] {
 
 /** How long a failed SMTP account should rest (see FailoverPool for the meaning of the result). */
 export function classifyMailError(error: unknown): number | null {
-  const e = error as { code?: string; responseCode?: number; message?: string };
-  const text = `${e.code ?? ""} ${e.responseCode ?? ""} ${e.message ?? ""}`;
+  const e = error as { code?: string; responseCode?: number; message?: string; response?: string };
+  const text = `${e.code ?? ""} ${e.responseCode ?? ""} ${e.message ?? ""} ${e.response ?? ""}`;
 
-  if (/EENVELOPE|5\.1\.1|user unknown|no such user|recipient (address )?rejected|invalid (recipient|address)/i.test(text)) {
-    return null; // the recipient is the problem, another sender will not help
-  }
-  if (e.code === "EAUTH" || /invalid login|username and password not accepted|application-specific password|535|534/i.test(text)) {
+  // Account problems are checked first. Gmail refuses an over-quota account at the DATA step, which
+  // nodemailer reports as EENVELOPE ("550 5.4.5 Daily user sending limit exceeded"); treating every
+  // EENVELOPE as a bad recipient meant the second account was never tried and every OTP failed.
+  if (e.code === "EAUTH" || /invalid login|username and password not accepted|application-specific password|\b535\b|\b534\b/i.test(text)) {
     return HOUR;
   }
   if (/daily user sending limit|sending limit exceeded|too many (login|messages|recipients)|5\.4\.5|4\.7\.0|rate limit|quota/i.test(text)) {
@@ -233,6 +233,9 @@ export function classifyMailError(error: unknown): number | null {
   }
   if (/suspicious|blocked|spam|554 5\.7\.1|550 5\.7\.1/i.test(text)) {
     return HOUR;
+  }
+  if (/5\.1\.1|5\.1\.3|user unknown|no such user|recipient (address )?rejected|invalid (recipient|address)|no recipients defined/i.test(text)) {
+    return null; // the recipient is the problem, another sender will not help
   }
   return 0; // timeouts, resets and anything unknown: try the other account, keep this one in rotation
 }

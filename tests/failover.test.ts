@@ -79,6 +79,43 @@ test('classifies Gmail errors', () => {
   assert.equal(classifyMailError(Object.assign(new Error('Connection timeout'), { code: 'ETIMEDOUT' })), 0)
 })
 
+test('an over-quota Gmail account fails over even though nodemailer calls it EENVELOPE', () => {
+  // The exact error production got from Gmail at the DATA step.
+  const overQuota = Object.assign(
+    new Error('Data command failed: 550-5.4.5 Daily user sending limit exceeded.'),
+    {
+      code: 'EENVELOPE',
+      responseCode: 550,
+      command: 'DATA',
+      response:
+        '550-5.4.5 Daily user sending limit exceeded. For more information on Gmail\n550 5.4.5  https://support.google.com/a/answer/166852 - gsmtp',
+    },
+  )
+  assert.equal(classifyMailError(overQuota), 3 * HOUR)
+
+  // A real bad recipient is still not retried on the other account.
+  const badRecipient = Object.assign(new Error("Can't send mail - all recipients were rejected: 550 5.1.1 user unknown"), {
+    code: 'EENVELOPE',
+    responseCode: 550,
+    command: 'RCPT TO',
+  })
+  assert.equal(classifyMailError(badRecipient), null)
+})
+
+test('sendMail-style failover reaches the second account when the first is over quota', async () => {
+  const pool = new FailoverPool(members(), 'TEST')
+  const overQuota = Object.assign(new Error('550 5.4.5 Daily user sending limit exceeded'), { code: 'EENVELOPE' })
+  const result = await pool.run(
+    members(),
+    async (m) => {
+      if (m.name === 'a') throw overQuota
+      return 'sent-via-' + m.name
+    },
+    classifyMailError,
+  )
+  assert.equal(result, 'sent-via-b')
+})
+
 test('classifies Google Drive errors', () => {
   assert.equal(classifyDriveError(new Error('invalid_grant')), 30 * MINUTE)
   assert.equal(classifyDriveError(Object.assign(new Error('Login Required'), { code: 401 })), 30 * MINUTE)
