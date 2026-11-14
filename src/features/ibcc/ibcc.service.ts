@@ -17,6 +17,44 @@ import {
 } from './ibcc.templates';
 import { RegisterTeamInput } from './ibcc.schema';
 import { sendSemifinalResultEmails } from './ibcc.status';
+import { isRepeatRegistrationTestEmail } from '../../utils/test-accounts';
+
+/**
+ * TEMPORARY, for test accounts only (see utils/test-accounts.ts): deletes the IBCC team(s) the test
+ * account leads, with everything that hangs off them, so the same account can go through team
+ * registration again. Teams it is only a member of are left alone. Files already on Drive stay there;
+ * the team's code is retired rather than handed to another team.
+ */
+async function removeTestAccountTeams(leaderUser: { id: number; email: string }) {
+  if (!isRepeatRegistrationTestEmail(leaderUser.email)) return;
+
+  const teams = await prisma.team.findMany({
+    where: { leaderId: leaderUser.id, programcode: { name: 'IBCC' } },
+    select: { id: true, name: true, code: true },
+  });
+  if (teams.length === 0) return;
+
+  const teamIds = teams.map((t) => t.id);
+  await prisma.$transaction([
+    prisma.submissionFile.deleteMany({ where: { submission: { teamId: { in: teamIds } } } }),
+    prisma.submission.deleteMany({ where: { teamId: { in: teamIds } } }),
+    prisma.teamMember.deleteMany({ where: { teamId: { in: teamIds } } }),
+    prisma.teamMemberInvitation.deleteMany({ where: { teamId: { in: teamIds } } }),
+    prisma.accessCode.deleteMany({ where: { teamId: { in: teamIds } } }),
+    prisma.slideDeck.deleteMany({ where: { teamId: { in: teamIds } } }),
+    prisma.semifinalScore.deleteMany({ where: { teamId: { in: teamIds } } }),
+    prisma.masterTeamCode.updateMany({
+      where: { teamId: { in: teamIds } },
+      data: { teamId: null, status: 'RETIRED' },
+    }),
+    prisma.team.deleteMany({ where: { id: { in: teamIds } } }),
+  ]);
+
+  ibccLogger.warn(
+    { leaderEmail: leaderUser.email, teams: teams.map((t) => `${t.name} [${t.code}]`) },
+    'Test account re-registering: removed its previous IBCC team(s)',
+  );
+}
 
 export interface RegistrationUploadedFiles {
   ktm_file: Express.Multer.File[];
@@ -43,6 +81,9 @@ export async function registerTeam(
   if (memberEmails.includes(normalizedLeaderEmail)) {
     throw new Error('Leader email cannot be listed as a team member.');
   }
+
+  // Test accounts only: clear their previous team first (also frees its name and its members).
+  await removeTestAccountTeams(leaderUser);
 
   const existingTeamName = await prisma.team.findUnique({
     where: { name: normalizedTeamName },
@@ -469,6 +510,9 @@ export async function getMyTeam(userId: number) {
       major: team.leader.major,
     },
     waGroupLink: env.IBCC_WA_GROUP_LINK ?? null,
+    // TEMPORARY: a test account leading this team may open team registration again (its old team is
+    // replaced on submit, see removeTestAccountTeams).
+    canRegisterAgain: isLeader && isRepeatRegistrationTestEmail(team.leader.email),
     members: nonLeaderMembers,
     submissions: {
       requirementsCompleted: team.submissionTeam.some(

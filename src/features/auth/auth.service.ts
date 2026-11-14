@@ -10,6 +10,8 @@ import { sendOtpEmail } from '../../services/mail.service'
 import { AppError } from '../../middlewares/error.middleware'
 import { GoogleUserInfo } from '../../services/google-auth.service'
 import { RegisterInput, OtpInput } from './auth.schema'
+// TEMPORARY test accounts that may register again and again (the 60s resend cooldown still applies).
+import { isRepeatRegistrationTestEmail } from '../../utils/test-accounts'
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000
 
@@ -24,16 +26,6 @@ const OTP_RESEND_COOLDOWN_MS = 60 * 1000
 const OTP_EMAIL_FAILED_MESSAGE =
   "We couldn't send the verification email right now. Please try again in a few minutes. If it keeps happening, please contact our team."
 
-/**
- * TEMPORARY, for testing OTP mail delivery: these addresses can go through Register again and again even
- * though they already have an account. Verifying the OTP then reuses the existing account (its name and
- * password are updated) instead of creating a new one. The 60s resend cooldown still applies.
- * Remove this list once mail testing is done.
- */
-const REPEAT_REGISTRATION_TEST_EMAILS = new Set(['rafkiyuda@gmail.com'])
-
-const isRepeatRegistrationTestEmail = (email: string) =>
-  REPEAT_REGISTRATION_TEST_EMAILS.has(email.trim().toLowerCase())
 
 const secondsUntilResend = (otpSentAt: Date) =>
   Math.ceil((OTP_RESEND_COOLDOWN_MS - (Date.now() - otpSentAt.getTime())) / 1000)
