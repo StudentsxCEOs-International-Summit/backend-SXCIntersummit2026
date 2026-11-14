@@ -30,6 +30,16 @@ const envSchema = z
     SMTP_FROM_2: z.string().optional(),
     /** Soft cap per sender per 24h before the other account is preferred (Gmail allows ~500). */
     SMTP_DAILY_LIMIT: z.coerce.number().int().positive().optional(),
+    // Bounce watcher: reads each sender's inbox over IMAP (same login as SMTP) and resends mails Gmail
+    // bounced as blocked through the other account. Runs only with two accounts; "false" turns it off.
+    MAIL_BOUNCE_WATCH: z
+      .enum(["true", "false"])
+      .transform((value) => value === "true")
+      .default(true),
+    IMAP_HOST: z.string().default("imap.gmail.com"),
+    IMAP_PORT: z.coerce.number().int().positive().default(993),
+    /** Seconds between batch mails such as reminders (plus up to 50% jitter). OTP mails never wait. */
+    MAIL_BULK_GAP_SECONDS: z.coerce.number().int().nonnegative().optional(),
     EMAIL_LOGO_URL: z
       .url()
       .default(

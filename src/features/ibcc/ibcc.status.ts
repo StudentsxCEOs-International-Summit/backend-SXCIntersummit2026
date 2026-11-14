@@ -85,7 +85,8 @@ export async function sendSemifinalResultEmails(
     });
 
     try {
-      const result = await sendMail({ to: team.leader.email, subject, html });
+      // Batch mail: spaced out so a results announcement is not one burst Gmail flags as spam.
+      const result = await sendMail({ to: team.leader.email, subject, html, bulk: true });
 
       emailLogs.push({
         toEmail: team.leader.email,

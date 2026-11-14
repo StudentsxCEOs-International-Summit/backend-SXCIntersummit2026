@@ -188,8 +188,16 @@ configRouter.post(
 // For cronjob.org, configure it to POST to: {APP_URL}/api/config/trigger-emails
 configRouter.post("/trigger-emails", authorizeConfigUpdate, async (_req: Request, res: Response) => {
   try {
-    const result = await triggerEmailScheduler();
-    return ok(res, result, "Email scheduler triggered manually.");
+    // Runs in the background: reminder mails are spaced about a minute apart, so a run can take a while.
+    const result = triggerEmailScheduler();
+    return ok(
+      res,
+      result,
+      result.started
+        ? "Email scheduler started in the background; reminder mails go out about a minute apart."
+        : "Email scheduler is already running.",
+      202,
+    );
   } catch (error: any) {
     return internalError(res, "Failed to trigger email scheduler.");
   }

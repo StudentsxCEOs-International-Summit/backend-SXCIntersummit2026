@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import prisma from "../configs/db";
-import { sendMail, renderEmailTemplate } from "../services/mail.service";
+import { sendMail, renderPlainEmail } from "../services/mail.service";
 import { getAppConfig, isRegistrationOpen, getEffectiveDeadline } from "../configs/appConfig";
 import { createChildLogger } from "../configs/logger";
 
@@ -11,24 +11,68 @@ const schedulerLogger = createChildLogger("SCHEDULER");
  *
  * Designed to work with cronjob.org or as a built-in node-cron job.
  *
- * This cron runs daily at 09:00 WIB (02:00 UTC) and:
+ * This cron runs daily at 09:00 WIB and:
  * 1. Sends registration deadline reminder emails (3 days before deadline).
  * 2. Sends payment reminder to teams with pending payment status.
+ *
+ * Reminder mails are batch mails (`bulk: true`): they go out about a minute apart instead of in one
+ * burst, because a burst of near-identical mails from one Gmail account gets them blocked as spam.
+ * A run therefore takes a while. A second trigger while one is running (the built-in cron and
+ * cronjob.org both firing) is skipped, and a leader already reminded recently is not mailed again.
  */
-export function startEmailSchedulerJob() {
-  // Runs daily at 09:00 WIB (UTC+7) → 02:00 UTC
-  cron.schedule("0 2 * * *", async () => {
-    schedulerLogger.info("Running scheduled email tasks");
+const SCHEDULE_TIMEZONE = "Asia/Jakarta";
 
+/** A leader who got a deadline reminder this recently is not reminded again (guards double triggers). */
+const DEADLINE_REMINDER_REPEAT_MS = 20 * 60 * 60 * 1000;
+
+const SIGNATURE_TEXT = ["", "Best regards,", "StudentsxCEOs International Summit 2026 Team"];
+
+export function startEmailSchedulerJob() {
+  // node-cron uses the server's own timezone unless told otherwise; pin it so 09:00 means 09:00 WIB.
+  cron.schedule(
+    "0 9 * * *",
+    async () => {
+      await runEmailScheduler("cron").done;
+    },
+    { timezone: SCHEDULE_TIMEZONE, noOverlap: true },
+  );
+
+  schedulerLogger.info("Email scheduler job started (daily at 09:00 WIB)");
+}
+
+export interface EmailSchedulerResult {
+  deadlineReminders: number;
+  paymentReminders: number;
+}
+
+let currentRun: Promise<EmailSchedulerResult> | null = null;
+
+/** Starts a run unless one is already going; `done` resolves when that run has finished. */
+export function runEmailScheduler(source: "cron" | "http"): {
+  started: boolean;
+  done: Promise<EmailSchedulerResult>;
+} {
+  if (currentRun) {
+    schedulerLogger.warn({ source }, "Email scheduler is already running; this trigger is skipped");
+    return { started: false, done: currentRun };
+  }
+
+  schedulerLogger.info({ source }, "Running scheduled email tasks");
+  currentRun = (async () => {
+    const result: EmailSchedulerResult = { deadlineReminders: 0, paymentReminders: 0 };
     try {
-      await sendDeadlineReminders();
-      await sendPaymentReminders();
+      result.deadlineReminders = await sendDeadlineReminders();
+      result.paymentReminders = await sendPaymentReminders();
     } catch (error: any) {
       schedulerLogger.error({ err: error }, "Scheduled email job error");
     }
+    schedulerLogger.info({ source, ...result }, "Scheduled email tasks finished");
+    return result;
+  })().finally(() => {
+    currentRun = null;
   });
 
-  schedulerLogger.info("Email scheduler job started (daily at 02:00 UTC)");
+  return { started: true, done: currentRun };
 }
 
 /**
@@ -57,26 +101,43 @@ async function sendDeadlineReminders(): Promise<number> {
     include: { leader: true },
   });
 
+  const deadlineText = deadline.toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: SCHEDULE_TIMEZONE,
+  });
+  const dayWord = daysUntilDeadline === 1 ? "day" : "days";
+
   let sent = 0;
   for (const team of pendingTeams) {
     if (!team.leader?.email) continue;
 
+    // Already reminded (a second trigger, or a restart in the middle of a run): skip.
+    const recentReminder = await prisma.emailLog.findFirst({
+      where: {
+        toEmail: team.leader.email,
+        template: "deadline_reminder",
+        sentAt: { gt: new Date(Date.now() - DEADLINE_REMINDER_REPEAT_MS) },
+      },
+    });
+    if (recentReminder) continue;
+
     try {
-      const html = renderEmailTemplate({
-        title: "Registration Deadline Reminder",
-        contentHtml: `
-          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 16px;">Hi <strong>${team.leader.name}</strong>,</p>
-          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">This is a reminder that the registration deadline for <strong>SXC International Summit 2026</strong> is in <strong>${daysUntilDeadline} day(s)</strong> (${deadline.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}).</p>
-          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">Please ensure all required registration documents are submitted before the deadline.</p>
-          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 0;">Best regards,<br><strong>StudentsxCEOs International Summit 2026 Team</strong></p>
-        `
+      const intro = `This is a reminder that registration for StudentsxCEOs International Summit 2026 closes in ${daysUntilDeadline} ${dayWord}, on ${deadlineText}.`;
+      const ask = "If your team still has documents to submit, please complete them on the website before then.";
+      const html = renderPlainEmail({
+        title: "Registration deadline reminder",
+        blocksHtml: [`Hi ${team.leader.name},`, intro, ask],
       });
 
       await sendMail({
         to: team.leader.email,
-        subject: `[SXC Intersummit 2026] ⏰ Registration Deadline Reminder – ${daysUntilDeadline} day(s) left!`,
+        subject: `[SXC Intersummit 2026] Registration closes in ${daysUntilDeadline} ${dayWord}`,
         html,
-        text: `Hi ${team.leader.name}, registration deadline is in ${daysUntilDeadline} day(s). Please complete your submission.`,
+        text: [`Hi ${team.leader.name},`, "", intro, "", ask, ...SIGNATURE_TEXT].join("\n"),
+        bulk: true,
       });
 
       await prisma.emailLog.create({
@@ -137,21 +198,19 @@ async function sendPaymentReminders(): Promise<number> {
     if (recentEmail) continue;
 
     try {
-      const html = renderEmailTemplate({
-        title: "Semifinal Payment Reminder",
-        contentHtml: `
-          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 16px;">Hi <strong>${team.leader.name}</strong>,</p>
-          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">Congratulations again on passing the preliminary round! Your team <strong>${team.name}</strong> has not yet submitted the semifinal payment proof for <strong>SXC International Summit 2026</strong>.</p>
-          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">The semifinal fee is <strong>${SEMIFINAL_FEE_TEXT}</strong>. Please transfer it and upload your payment proof from the My Team page as soon as possible.</p>
-          <p style="font-size: 15px; line-height: 1.6; margin-bottom: 0;">Best regards,<br><strong>StudentsxCEOs International Summit 2026 Team</strong></p>
-        `
+      const intro = `Congratulations again on passing the preliminary round. We haven't received the semifinal payment proof for your team, ${team.name}, yet.`;
+      const ask = `The semifinal fee is ${SEMIFINAL_FEE_TEXT}. Once you've transferred it, please upload the payment proof from the My Team page on the website.`;
+      const html = renderPlainEmail({
+        title: "Semifinal payment reminder",
+        blocksHtml: [`Hi ${team.leader.name},`, intro, ask],
       });
 
       await sendMail({
         to: team.leader.email,
-        subject: `[SXC Intersummit 2026] 💳 Semifinal Payment Reminder – ${team.name}`,
+        subject: `[SXC Intersummit 2026] Semifinal payment for team ${team.name}`,
         html,
-        text: `Hi ${team.leader.name}, please pay the semifinal fee (${SEMIFINAL_FEE_TEXT}) and upload the payment proof for team ${team.name}.`,
+        text: [`Hi ${team.leader.name},`, "", intro, "", ask, ...SIGNATURE_TEXT].join("\n"),
+        bulk: true,
       });
 
       await prisma.emailLog.create({
@@ -176,12 +235,11 @@ async function sendPaymentReminders(): Promise<number> {
 }
 
 /**
- * One-off endpoint handler to trigger the email scheduler manually.
- * Useful for integration with cronjob.org webhooks.
+ * For the HTTP triggers (cronjob.org, admin button): starts a run in the background and answers right
+ * away. With paced sending a run can take many minutes, longer than an HTTP caller waits; the counts
+ * show up in the "Scheduled email tasks finished" log line.
  */
-export async function triggerEmailScheduler(): Promise<{ deadlineReminders: number; paymentReminders: number }> {
-  const deadlineReminders = await sendDeadlineReminders();
-  const paymentReminders = await sendPaymentReminders();
-  return { deadlineReminders, paymentReminders };
+export function triggerEmailScheduler(): { started: boolean; alreadyRunning: boolean } {
+  const { started } = runEmailScheduler("http");
+  return { started, alreadyRunning: !started };
 }
-
