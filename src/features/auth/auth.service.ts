@@ -24,6 +24,17 @@ const OTP_RESEND_COOLDOWN_MS = 60 * 1000
 const OTP_EMAIL_FAILED_MESSAGE =
   "We couldn't send the verification email right now. Please try again in a few minutes. If it keeps happening, please contact our team."
 
+/**
+ * TEMPORARY, for testing OTP mail delivery: these addresses can go through Register again and again even
+ * though they already have an account. Verifying the OTP then reuses the existing account (its name and
+ * password are updated) instead of creating a new one. The 60s resend cooldown still applies.
+ * Remove this list once mail testing is done.
+ */
+const REPEAT_REGISTRATION_TEST_EMAILS = new Set(['rafkiyuda@gmail.com'])
+
+const isRepeatRegistrationTestEmail = (email: string) =>
+  REPEAT_REGISTRATION_TEST_EMAILS.has(email.trim().toLowerCase())
+
 const secondsUntilResend = (otpSentAt: Date) =>
   Math.ceil((OTP_RESEND_COOLDOWN_MS - (Date.now() - otpSentAt.getTime())) / 1000)
 
@@ -62,7 +73,7 @@ export async function registerUser(input: RegisterInput) {
   const { name, email, password } = input
 
   const existingUser = await findUserByEmail(email)
-  if (existingUser) {
+  if (existingUser && !isRepeatRegistrationTestEmail(email)) {
     throw new Error('Email is already registered as user')
   }
 
@@ -148,22 +159,31 @@ export async function verifyOtp(input: OtpInput) {
   }
 
   if (pending.purpose === 'register') {
+    const userSelect = { id: true, name: true, email: true, role: true } as const
+    // Test addresses (see REPEAT_REGISTRATION_TEST_EMAILS) that already have an account reuse it.
+    const reuseExisting =
+      isRepeatRegistrationTestEmail(pending.email) && (await findUserByEmail(pending.email)) !== null
+
     const [newUser] = await prisma.$transaction([
-      prisma.user.create({
-        data: {
-          name: pending.name || 'User',
-          email: pending.email,
-          password: pending.password || '',
-          status: 1,
-          role: 'USER',
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-        },
-      }),
+      reuseExisting
+        ? prisma.user.update({
+            where: { email: pending.email },
+            data: {
+              name: pending.name || 'User',
+              password: pending.password || '',
+            },
+            select: userSelect,
+          })
+        : prisma.user.create({
+            data: {
+              name: pending.name || 'User',
+              email: pending.email,
+              password: pending.password || '',
+              status: 1,
+              role: 'USER',
+            },
+            select: userSelect,
+          }),
       prisma.pendingUserVerification.delete({
         where: { email },
       }),
