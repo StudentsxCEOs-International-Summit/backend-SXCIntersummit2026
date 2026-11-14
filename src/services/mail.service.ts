@@ -275,46 +275,58 @@ export async function sendOtpEmail(
 ) {
   const isRegister = purpose === "register";
   const title = isRegister
-    ? "Account Registration Verification"
-    : "Password Reset Request";
+    ? "Your verification code"
+    : "Your password reset code";
   const subject = `[SXC Intersummit 2026] ${title}`;
+  const intro = isRegister
+    ? "Thanks for signing up for StudentsxCEOs International Summit 2026. Enter this code on the sign-up page to finish creating your account:"
+    : "We received a request to reset the password of your StudentsxCEOs International Summit 2026 account. Enter this code to continue:";
+  const outro = isRegister
+    ? "If you didn't sign up, you can ignore this email and no account will be created."
+    : "If you didn't ask to reset your password, you can ignore this email and your password stays the same.";
 
-  const contentHtml = `
-    <h2 style="margin: 0 0 16px 0; color: #0f172a; font-size: 18px; font-weight: 600;">Hello,</h2>
-    <p style="margin: 0 0 24px 0; line-height: 1.6; color: #475569; font-size: 15px;">
-      ${
-        isRegister
-          ? "Thank you for registering for <strong>StudentsxCEOs International Summit 2026</strong>. Use the following One-Time Password (OTP) to activate your account:"
-          : "We received a request to reset your password for <strong>SXC Intersummit 2026</strong>. Use the following One-Time Password (OTP) to proceed:"
-      }
-    </p>
-    
-    <div style="text-align: center; margin: 28px 0;">
-      <div style="display: inline-block; padding: 16px 36px; background-color: #f8fafc; border: 2px dashed #3b82f6; border-radius: 12px; font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #1e3a8a;">
-        ${otp}
-      </div>
-    </div>
+  // Gmail's outbound filter was holding these mails back as suspicious. A short, personal-looking message
+  // with no remote images, no tracking-style links and no alarm wording reads like the one-to-one
+  // verification mail it is, so the OTP mail stays deliberately plain instead of using the branded layout.
+  const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin: 0; padding: 24px 16px; background-color: #ffffff; font-family: Arial, Helvetica, sans-serif; color: #1e293b; font-size: 15px; line-height: 1.6;">
+  <div style="max-width: 520px; margin: 0 auto;">
+    <p style="margin: 0 0 16px 0;">Hi,</p>
+    <p style="margin: 0 0 16px 0;">${intro}</p>
+    <p style="margin: 0 0 16px 0; font-size: 28px; font-weight: 700; letter-spacing: 6px; color: #0f172a;">${otp}</p>
+    <p style="margin: 0 0 16px 0;">The code is valid for 5 minutes. Please keep it to yourself; our team will never ask you for it.</p>
+    <p style="margin: 0 0 24px 0; color: #64748b;">${outro}</p>
+    <p style="margin: 0;">Best regards,<br>StudentsxCEOs International Summit 2026 Team</p>
+  </div>
+</body>
+</html>`;
 
-    <p style="margin: 0 0 10px 0; line-height: 1.5; color: #64748b; font-size: 13px; text-align: center;">
-      This OTP code is valid for <strong>5 minutes</strong>.
-    </p>
-    <p style="margin: 0; line-height: 1.5; color: #ef4444; font-size: 13px; text-align: center;">
-      Do NOT share this code with anyone for your account security.
-    </p>
-  `;
-
-  const htmlContent = renderEmailTemplate({
-    title,
-    headerHeading: title,
-    contentHtml,
-    footerNote: "If you did not initiate this request, you can safely ignore this email.",
-  });
+  const text = [
+    "Hi,",
+    "",
+    intro,
+    "",
+    otp,
+    "",
+    "The code is valid for 5 minutes. Please keep it to yourself; our team will never ask you for it.",
+    "",
+    outro,
+    "",
+    "Best regards,",
+    "StudentsxCEOs International Summit 2026 Team",
+  ].join("\n");
 
   return await sendMail({
     to: email,
     subject,
     html: htmlContent,
-    text: `Your SXC Intersummit 2026 OTP code is: ${otp}. This code is valid for 5 minutes.`,
+    text,
     // Marks it as an automatic, one-to-one message (no auto-replies, not a newsletter).
     headers: { "Auto-Submitted": "auto-generated", "X-Auto-Response-Suppress": "OOF, AutoReply" },
   });
