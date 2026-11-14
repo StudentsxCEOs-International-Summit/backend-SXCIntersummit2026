@@ -2,6 +2,9 @@ import crypto from 'crypto';
 import { createChildLogger } from '../../configs/logger';
 
 const ibccLogger = createChildLogger('IBCC');
+
+/** How long after registration a blocked confirmation mail is still worth resending via the other account. */
+const CONFIRMATION_RESEND_WINDOW_MS = 6 * 60 * 60 * 1000;
 import prisma from '../../configs/db';
 import { env } from '../../configs/env';
 import { hashPassword } from '../../utils/bcrypt';
@@ -245,7 +248,7 @@ export async function registerTeam(
 
   result.pendingFileIds.forEach(enqueueDriveUpload);
 
-  const leaderEmailHtml = renderTeamRegistrationConfirmationEmail({
+  const leaderEmail = renderTeamRegistrationConfirmationEmail({
     leaderName: leaderUser.name,
     teamName: result.team.name,
     teamCode: result.teamCode,
@@ -255,8 +258,12 @@ export async function registerTeam(
 
   sendMail({
     to: leaderUser.email,
-    subject: `Registration Confirmed - Team ${result.team.name} [${result.teamCode}] | IBCC 2026`,
-    html: leaderEmailHtml,
+    subject: `[SXC Intersummit 2026] IBCC registration confirmed: team ${result.team.name}`,
+    html: leaderEmail.html,
+    text: leaderEmail.text,
+    // This mail carries the WhatsApp group link: if Gmail bounces it as blocked, resend it through the
+    // other account (see jobs/mail-bounce.job.ts).
+    retryOnBlock: { expiresAt: Date.now() + CONFIRMATION_RESEND_WINDOW_MS },
   }).catch((err) => {
     ibccLogger.error({ err, leaderEmail: leaderUser.email, msg: 'Leader confirmation email failed' });
   });

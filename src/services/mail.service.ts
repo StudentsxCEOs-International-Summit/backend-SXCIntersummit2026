@@ -439,6 +439,13 @@ ${paragraphs}
 </html>`;
 }
 
+/**
+ * Codes can land in Spam while the sending account builds reputation; "Not spam" from recipients is what
+ * moves the next mails to the inbox. (The "can take up to 60 seconds" hint lives on the OTP page.)
+ */
+const SPAM_NOTE =
+  "Found this email in your Spam or Promotions folder? Please mark it as \"Not spam\" so our next emails, including your team's updates, reach your inbox.";
+
 /** Matches OTP_EXPIRY_MS in auth.service and the "valid for 5 minutes" in the mail. */
 const OTP_VALID_MS = 5 * 60 * 1000;
 
@@ -466,6 +473,7 @@ export async function sendOtpEmail(
       intro,
       `<span style="font-size: 28px; font-weight: 700; letter-spacing: 6px; color: #0f172a;">${otp}</span>`,
       "The code is valid for 5 minutes. Please keep it to yourself; our team will never ask you for it.",
+      SPAM_NOTE,
       `<span style="color: #64748b;">${outro}</span>`,
     ],
   });
@@ -478,6 +486,8 @@ export async function sendOtpEmail(
     otp,
     "",
     "The code is valid for 5 minutes. Please keep it to yourself; our team will never ask you for it.",
+    "",
+    SPAM_NOTE,
     "",
     outro,
     "",

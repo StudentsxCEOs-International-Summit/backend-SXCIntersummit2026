@@ -78,7 +78,8 @@ const envSchema = z
     // Optional: committee address that gets an email for every new Contact page enquiry.
     CONTACT_NOTIFY_EMAIL: z.email().optional(),
     CRON_SECRET: z.string().optional(),
-    IBCC_WA_GROUP_LINK: z.url().optional(),
+    // Full chat.whatsapp.com link on purpose: link shorteners (bit.ly, ...) in a mail are a strong spam signal.
+    IBCC_WA_GROUP_LINK: z.url().default("https://chat.whatsapp.com/Hh5beE54nRB9S08sE5TWsI"),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production" && !value.CORS_ORIGIN) {
