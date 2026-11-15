@@ -1512,7 +1512,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
       get: {
         tags: ['Config - Application'],
         summary: 'Get application configuration',
-        description: 'Returns the current registration deadline, extended registration status, and slide upload limits.',
+        description: 'Returns the current registration deadline, extended registration status, slide upload limits, and audit information.',
         responses: {
           200: {
             description: 'Configuration retrieved.',
@@ -1527,10 +1527,22 @@ REST API documentation for **SxC International Summit 2026** backend system.
                       type: 'object',
                       properties: {
                         registrationOpen: { type: 'boolean', example: true },
-                        deadline: { type: 'string', format: 'date-time', example: '2026-11-15T16:59:59.000Z' },
-                        extendedRegistration: { type: 'boolean', example: false },
+                        deadline: { type: 'string', format: 'date-time', example: '2026-12-19T16:59:59.000Z' },
+                        extendedRegistration: { type: 'boolean', example: false, deprecated: true },
                         maxSlidePages: { type: 'integer', example: 5 },
                         maxSlideSizeMB: { type: 'integer', example: 20 },
+                        deadlineReminderDays: { type: 'integer', example: 3 },
+                        paymentReminderDays: { type: 'integer', example: 3 },
+                        updatedAt: { type: 'string', format: 'date-time', nullable: true, example: '2026-11-16T01:30:00.000Z' },
+                        updatedBy: {
+                          type: 'object',
+                          nullable: true,
+                          properties: {
+                            id: { type: 'integer', example: 1 },
+                            name: { type: 'string', example: 'Super Admin' },
+                            email: { type: 'string', example: 'admin@sxcintersummit.com' },
+                          },
+                        },
                       },
                     },
                   },
@@ -1543,7 +1555,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
       patch: {
         tags: ['Config - Application'],
         summary: 'Update application configuration (Admin / Cron Secret)',
-        description: 'Dynamically updates application configuration flags (deadlines, slide limits, reminder days) without redeploying. Authorized via Admin JWT or x-cron-secret header.',
+        description: 'Dynamically updates application configuration flags in PostgreSQL database with instant write-through memory cache synchronization. Authorized via Admin JWT or x-cron-secret header.',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }, { cronSecretAuth: [] }],
         requestBody: {
           required: true,
@@ -1552,13 +1564,13 @@ REST API documentation for **SxC International Summit 2026** backend system.
               schema: {
                 type: 'object',
                 properties: {
-                  registrationDeadline: { type: 'string', format: 'date-time', example: '2026-11-20T23:59:59+07:00' },
-                  registrationExtendedDeadline: { type: 'string', format: 'date-time', example: '2026-11-30T23:59:59+07:00' },
-                  extendedRegistrationEnabled: { type: 'boolean', example: true },
+                  registrationDeadline: { type: 'string', format: 'date-time', example: '2026-12-19T23:59:59+07:00' },
+                  registrationExtendedDeadline: { type: 'string', format: 'date-time', example: '2026-12-30T23:59:59+07:00' },
+                  extendedRegistrationEnabled: { type: 'boolean', example: false },
                   maxSlidePages: { type: 'integer', example: 5 },
                   maxSlideSizeMB: { type: 'integer', example: 20 },
                   deadlineReminderDays: { type: 'integer', example: 3 },
-                  paymentReminderDays: { type: 'integer', example: 2 },
+                  paymentReminderDays: { type: 'integer', example: 3 },
                 },
               },
             },
@@ -1566,7 +1578,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
         },
         responses: {
           200: {
-            description: 'Configuration updated successfully.',
+            description: 'Configuration updated successfully in database.',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } },
           },
           400: { description: 'Bad request or invalid date format.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
@@ -1578,11 +1590,11 @@ REST API documentation for **SxC International Summit 2026** backend system.
     '/api/config/reload': {
       post: {
         tags: ['Config - Application'],
-        summary: 'Reload application configuration (Admin)',
-        description: 'Reloads the application configuration from environment variables. Useful after changing env vars without restarting.',
+        summary: 'Reload application configuration from environment defaults (Admin)',
+        description: 'Resets the application configuration in the database back to environment defaults defined in env.ts without restarting the server.',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         responses: {
-          200: { description: 'Configuration reloaded.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
+          200: { description: 'Configuration reloaded from environment defaults into database.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiResponseSuccess' } } } },
           401: { description: 'Unauthorized.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
           403: { description: 'Forbidden – Admin access required.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } } },
         },

@@ -15,6 +15,7 @@ import { startTokenCleanupJob } from './jobs/token-cleanup.job'
 import { startEmailSchedulerJob } from './jobs/email-scheduler.job'
 import { startDriveUploadWorker } from './jobs/drive-upload.job'
 import { startMailBounceWatcher } from './jobs/mail-bounce.job'
+import { initAppConfig } from './configs/appConfig'
 import routes from './routes'
 import path from 'path'
 
@@ -104,6 +105,9 @@ app.use(notFound)
 app.use(errorHandler)
 
 if (env.NODE_ENV !== 'test') {
+  initAppConfig().catch((err) => {
+    logger.warn({ err }, 'Failed to initialize AppConfig from database; using fallback')
+  })
   startTokenCleanupJob()
   startEmailSchedulerJob()
   startDriveUploadWorker()

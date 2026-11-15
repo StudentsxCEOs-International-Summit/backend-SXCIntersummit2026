@@ -3,8 +3,8 @@ import { requireAuth, requireAdmin } from "../../middlewares/auth.middleware";
 import { ok, badRequest, internalError } from "../../utils/response";
 import {
   getAppConfig,
-  reloadAppConfig,
-  updateAppConfig,
+  reloadAppConfigFromEnv,
+  updateAppConfigInDb,
   isRegistrationOpen,
   getEffectiveDeadline,
   AppConfigType,
@@ -14,23 +14,17 @@ import { env } from "../../configs/env";
 
 const configRouter = Router();
 
-/**
- * Middleware: Allows access if `x-cron-secret` matches `env.CRON_SECRET`,
- * OR if the user provides a valid Admin/Staff auth token.
- */
 function authorizeConfigUpdate(req: Request, res: Response, next: () => void) {
   const secret = req.headers["x-cron-secret"] as string | undefined;
   if (secret && env.CRON_SECRET && secret === env.CRON_SECRET) {
     return next();
   }
 
-  // Fallback to checking admin token
   return requireAuth(req, res, () => {
     return requireAdmin(req, res, next);
   });
 }
 
-// GET /config — public, returns registration deadline info
 configRouter.get("/", (_req: Request, res: Response) => {
   try {
     const config = getAppConfig();
@@ -46,6 +40,8 @@ configRouter.get("/", (_req: Request, res: Response) => {
         maxSlideSizeMB: config.MAX_SLIDE_SIZE_MB,
         deadlineReminderDays: config.DEADLINE_REMINDER_DAYS,
         paymentReminderDays: config.PAYMENT_REMINDER_DAYS,
+        updatedAt: config.updatedAt,
+        updatedBy: config.updatedBy,
       },
       "Application configuration retrieved.",
     );
@@ -54,12 +50,9 @@ configRouter.get("/", (_req: Request, res: Response) => {
   }
 });
 
-/**
- * PATCH /config — updates application configuration dynamically without redeploying.
- * Supports updating registration deadline, extended registration flags, slide limits, etc.
- */
-configRouter.patch("/", authorizeConfigUpdate, (req: Request, res: Response) => {
+configRouter.patch("/", authorizeConfigUpdate, async (req: Request, res: Response) => {
   try {
+    const staffId = (req as any).user?.id ? Number((req as any).user.id) : undefined;
     const {
       registrationDeadline,
       REGISTRATION_DEADLINE,
@@ -85,7 +78,7 @@ configRouter.patch("/", authorizeConfigUpdate, (req: Request, res: Response) => 
       if (isNaN(parsed.getTime())) {
         return badRequest(
           res,
-          "Invalid date format for registrationDeadline. Please use ISO format (e.g. '2026-10-18T23:59:59+07:00')",
+          "Invalid date format for registrationDeadline. Please use ISO format (e.g. '2026-12-19T23:59:59+07:00')",
         );
       }
       updates.REGISTRATION_DEADLINE = deadline;
@@ -98,7 +91,7 @@ configRouter.patch("/", authorizeConfigUpdate, (req: Request, res: Response) => 
       if (isNaN(parsed.getTime())) {
         return badRequest(
           res,
-          "Invalid date format for registrationExtendedDeadline. Please use ISO format (e.g. '2026-11-30T23:59:59+07:00')",
+          "Invalid date format for registrationExtendedDeadline. Please use ISO format (e.g. '2026-12-30T23:59:59+07:00')",
         );
       }
       updates.REGISTRATION_EXTENDED_DEADLINE = extDeadline;
@@ -147,7 +140,7 @@ configRouter.patch("/", authorizeConfigUpdate, (req: Request, res: Response) => 
       );
     }
 
-    const updated = updateAppConfig(updates);
+    const updated = await updateAppConfigInDb(updates, staffId);
     const effectiveDeadline = getEffectiveDeadline();
 
     return ok(
@@ -160,35 +153,33 @@ configRouter.patch("/", authorizeConfigUpdate, (req: Request, res: Response) => 
         maxSlideSizeMB: updated.MAX_SLIDE_SIZE_MB,
         deadlineReminderDays: updated.DEADLINE_REMINDER_DAYS,
         paymentReminderDays: updated.PAYMENT_REMINDER_DAYS,
+        updatedAt: updated.updatedAt,
+        updatedBy: updated.updatedBy,
         config: updated,
       },
-      "Application configuration updated successfully.",
+      "Application configuration updated successfully in database.",
     );
   } catch (error: any) {
     return internalError(res, "Failed to update configuration: " + error.message);
   }
 });
 
-// POST /config/reload — admin, reloads config from env
 configRouter.post(
   "/reload",
   requireAuth,
   requireAdmin,
-  (_req: Request, res: Response) => {
+  async (_req: Request, res: Response) => {
     try {
-      const config = reloadAppConfig();
-      return ok(res, config, "Configuration reloaded from environment.");
+      const config = await reloadAppConfigFromEnv();
+      return ok(res, config, "Configuration reloaded from environment defaults into database.");
     } catch (error: any) {
       return internalError(res, "Failed to reload configuration.");
     }
   },
 );
 
-// POST /config/trigger-emails — admin or cronjob.org webhook (send the x-cron-secret header)
-// For cronjob.org, configure it to POST to: {APP_URL}/api/config/trigger-emails
 configRouter.post("/trigger-emails", authorizeConfigUpdate, async (_req: Request, res: Response) => {
   try {
-    // Runs in the background: reminder mails are spaced about a minute apart, so a run can take a while.
     const result = triggerEmailScheduler();
     return ok(
       res,
@@ -204,4 +195,3 @@ configRouter.post("/trigger-emails", authorizeConfigUpdate, async (_req: Request
 });
 
 export default configRouter;
-

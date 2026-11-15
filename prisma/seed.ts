@@ -25,7 +25,6 @@ async function main() {
   await prisma.staff.upsert({
     where: { email: 'admin@sxcintersummit.com' },
     update: {
-      password: adminPassword,
       divisionId: itDivision.id,
       role: 'ADMIN',
     },
@@ -35,6 +34,21 @@ async function main() {
       password: adminPassword,
       role: 'ADMIN',
       divisionId: itDivision.id,
+    },
+  })
+
+  await prisma.appConfig.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      registrationDeadline: new Date('2026-12-19T23:59:59+07:00'),
+      registrationExtendedDeadline: new Date('2026-12-30T23:59:59+07:00'),
+      extendedRegistrationEnabled: false,
+      maxSlidePages: 5,
+      maxSlideSizeMB: 20,
+      deadlineReminderDays: 3,
+      paymentReminderDays: 3,
     },
   })
 
@@ -67,4 +81,5 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect()
+    process.exit(0)
   })
