@@ -127,6 +127,7 @@ model Staff {
   Notification Notification[]
   activity     activityLog[]
   judgedScores SemifinalScore[]
+  configsUpdated AppConfig[]    @relation("AppConfigUpdatedBy")
 }
 
 model Division {
@@ -464,4 +465,22 @@ model ContactMessage {
   @@index([status])
   @@index([createdAt])
   @@map("contact_message")
+}
+
+model AppConfig {
+  id                           Int      @id @default(1)
+  registrationDeadline         DateTime @default(dbgenerated("'2026-12-19 23:59:59+07'::timestamptz"))
+  registrationExtendedDeadline DateTime @default(dbgenerated("'2026-12-30 23:59:59+07'::timestamptz"))
+  extendedRegistrationEnabled  Boolean  @default(false)
+  maxSlidePages                Int      @default(5)
+  maxSlideSizeMB               Int      @default(20)
+  deadlineReminderDays         Int      @default(3)
+  paymentReminderDays          Int      @default(3)
+  updatedById                  Int?
+  updatedAt                    DateTime @updatedAt
+  createdAt                    DateTime @default(now())
+
+  updatedBy                    Staff?   @relation("AppConfigUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("app_config")
 }
