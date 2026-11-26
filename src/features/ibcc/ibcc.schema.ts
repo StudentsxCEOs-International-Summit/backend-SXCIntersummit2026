@@ -35,10 +35,23 @@ const parseBoolean = (val: unknown) => {
 };
 
 const normalizePhone = (val: unknown) => {
-  if (typeof val === 'string') {
-    return val.replace(/[\s\-]/g, '');
+  if (typeof val !== 'string') return val;
+  // NFKC turns full-width digits and '+' into ASCII; dropping every non-digit then also removes the
+  // invisible characters a copy-paste brings along (zero-width space, soft hyphen, en dash, ...).
+  const cleaned = val.normalize('NFKC').trim();
+  const explicitCountryCode = cleaned.startsWith('+') || cleaned.startsWith('00');
+  let digits = cleaned.replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (!digits) return '';
+  // Store Indonesian numbers in one canonical form: 08...
+  if (digits.startsWith('62')) return '0' + digits.slice(2).replace(/^0+/, '');
+  // Guess the missing Indonesian '0' only when the visitor sent no country code: +86, +81, +82 and
+  // +852 all start with 8 and must never be rewritten into 08...
+  if (!explicitCountryCode) {
+    if (digits.startsWith('0')) return digits;
+    if (digits.startsWith('8') && digits.length <= 12) return '0' + digits;
   }
-  return val;
+  return explicitCountryCode ? `+${digits}` : digits;
 };
 
 const normalizeMemberComposition = (val: unknown) => {
