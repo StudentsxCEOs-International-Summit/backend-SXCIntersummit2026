@@ -61,8 +61,23 @@ test('normalizes full-width digits', () => {
 })
 
 test('keeps international numbers with an explicit country code', () => {
-  assert.equal(parsedPhone('+60123456789'), '+60123456789')
-  assert.equal(parsedPhone('+1 (415) 555-0132'), '+14155550132')
+  const inputs: Array<[string, string]> = [
+    ['+60123456789', '+60123456789'],
+    ['+65 9123 4567', '+6591234567'],
+    ['+86 138-0013-8000', '+8613800138000'],
+    ['+81 90-1234-5678', '+819012345678'],
+    ['+82 10-1234-5678', '+821012345678'],
+    ['+852 9123 4567', '+85291234567'],
+    ['+44 7911 123456', '+447911123456'],
+    ['+1 (415) 555-0132', '+14155550132'],
+  ]
+  for (const [input, expected] of inputs) {
+    assert.equal(parsedPhone(input), expected, input)
+  }
+})
+
+test('rejects a foreign local number sent without a country code', () => {
+  assert.equal(registerTeamSchema.safeParse(payload('07911123456')).success, false)
 })
 
 test('still rejects values that are not phone numbers', () => {
