@@ -34,11 +34,14 @@ const parseBoolean = (val: unknown) => {
   return val;
 };
 
-const normalizePhone = (val: unknown) => {
-  if (typeof val === 'string') {
-    return val.replace(/[\s\-]/g, '');
-  }
-  return val;
+export const normalizePhone = (val: unknown) => {
+  if (typeof val !== 'string') return val;
+  // Strip any leading invisible Unicode marks, spaces, or punctuation before checking '+'.
+  const cleaned = val.replace(/^[^\d+]+/, '');
+  const hasLeadingPlus = cleaned.startsWith('+');
+  const digitsOnly = cleaned.replace(/\D/g, '');
+  if (!digitsOnly) return '';
+  return hasLeadingPlus ? `+${digitsOnly}` : digitsOnly;
 };
 
 const normalizeMemberComposition = (val: unknown) => {
@@ -102,6 +105,7 @@ export const memberItemSchema = z.object({
 });
 
 export const leaderInfoSchema = z.object({
+  fullName: z.string().trim().min(2, 'Full name must be at least 2 characters').optional(),
   whatsapp: z.preprocess(
     normalizePhone,
     z.string().trim().regex(phoneRegex, 'Please enter a valid WhatsApp number (e.g. 08123456789 or +628123456789)'),
