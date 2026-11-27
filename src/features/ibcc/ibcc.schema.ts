@@ -34,19 +34,17 @@ const parseBoolean = (val: unknown) => {
   return val;
 };
 
-const normalizePhone = (val: unknown) => {
+export const normalizePhone = (val: unknown) => {
   if (typeof val !== 'string') return val;
-  // NFKC turns full-width digits and '+' into ASCII; dropping every non-digit then also removes the
-  // invisible characters a copy-paste brings along (zero-width space, soft hyphen, en dash, ...).
-  const cleaned = val.normalize('NFKC').trim();
+  // NFKC turns full-width digits and '+' into ASCII; strip leading invisible marks/punctuation before checking '+'.
+  const cleaned = val.normalize('NFKC').replace(/^[^\d+]+/, '');
   const explicitCountryCode = cleaned.startsWith('+') || cleaned.startsWith('00');
   let digits = cleaned.replace(/\D/g, '');
   if (digits.startsWith('00')) digits = digits.slice(2);
   if (!digits) return '';
   // Store Indonesian numbers in one canonical form: 08...
   if (digits.startsWith('62')) return '0' + digits.slice(2).replace(/^0+/, '');
-  // Guess the missing Indonesian '0' only when the visitor sent no country code: +86, +81, +82 and
-  // +852 all start with 8 and must never be rewritten into 08...
+  // Guess missing Indonesian '0' only without explicit country code so +81/+82/+86/+852 stay intact.
   if (!explicitCountryCode) {
     if (digits.startsWith('0')) return digits;
     if (digits.startsWith('8') && digits.length <= 12) return '0' + digits;
@@ -115,6 +113,7 @@ export const memberItemSchema = z.object({
 });
 
 export const leaderInfoSchema = z.object({
+  fullName: z.string().trim().min(2, 'Full name must be at least 2 characters').optional(),
   whatsapp: z.preprocess(
     normalizePhone,
     z.string().trim().regex(phoneRegex, 'Please enter a valid WhatsApp number (e.g. 08123456789 or +628123456789)'),

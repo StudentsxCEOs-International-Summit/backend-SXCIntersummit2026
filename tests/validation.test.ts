@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { z } from 'zod'
 import { formatZodIssue, formatZodError } from '../src/utils/validation'
-import { registerTeamSchema } from '../src/features/ibcc/ibcc.schema'
+import { normalizePhone, registerTeamSchema } from '../src/features/ibcc/ibcc.schema'
 import { validateRequest } from '../src/middlewares/validation.middleware'
 
 test('formatZodIssue formats nested and array path segments', () => {
@@ -102,7 +102,7 @@ test('registerTeamSchema normalizes boolean inputs from checkboxes and radio but
   if (result.success) {
     assert.equal(result.data.memberComposition, 'MULTIPLE_UNIVERSITIES')
     assert.equal(result.data.sourceInfo, 'FRIENDS_FAMILY')
-    assert.equal(result.data.leaderInfo.whatsapp, '+6281234567890')
+    assert.equal(result.data.leaderInfo.whatsapp, '081234567890')
     assert.equal(result.data.agreeTerms, true)
     assert.equal(result.data.confirmParticipation, true)
     assert.deepEqual(result.data.members, [])
@@ -181,4 +181,108 @@ test('formatZodIssue prevents internal SQL query or table name leakage', () => {
     formatZodIssue(issueWithSql),
     'searchQuery: Invalid value',
   )
+})
+
+test('registerTeamSchema preserves optional leaderInfo.fullName and stays backward compatible', () => {
+  const withName = registerTeamSchema.safeParse({
+    teamName: 'Delta Team',
+    memberComposition: 'SAME_UNIVERSITY',
+    sourceInfo: 'INSTAGRAM',
+    leaderInfo: {
+      fullName: '  Muhammad Azka  ',
+      whatsapp: '+6281234567890',
+      institution: 'Universitas Padjadjaran',
+      major: 'Bisnis Digital',
+      yearOfStudy: '1st year',
+    },
+    members: [],
+    agreeTerms: true,
+    confirmParticipation: true,
+  })
+  assert.equal(withName.success, true)
+  if (withName.success) {
+    assert.equal(withName.data.leaderInfo.fullName, 'Muhammad Azka')
+  }
+
+  const withoutName = registerTeamSchema.safeParse({
+    teamName: 'Delta Team',
+    memberComposition: 'SAME_UNIVERSITY',
+    sourceInfo: 'INSTAGRAM',
+    leaderInfo: {
+      whatsapp: '+6281234567890',
+      institution: 'Universitas Padjadjaran',
+      major: 'Bisnis Digital',
+      yearOfStudy: '1st year',
+    },
+    members: [],
+    agreeTerms: true,
+    confirmParticipation: true,
+  })
+  assert.equal(withoutName.success, true)
+  if (withoutName.success) {
+    assert.equal(withoutName.data.leaderInfo.fullName, undefined)
+  }
+})
+
+test('normalizePhone and registerTeamSchema strip invisible Unicode marks while preserving international codes', () => {
+  assert.equal(normalizePhone('+6281212344182\u200E'), '081212344182')
+  assert.equal(normalizePhone('\u2066+6281212344182\u2069'), '081212344182')
+  assert.equal(normalizePhone('\u2066+81312345678\u2069'), '+81312345678')
+  assert.equal(normalizePhone('\u202A0812-1234-4182\u202C'), '081212344182')
+  assert.equal(normalizePhone('\u200B(0812) 1234.4182'), '081212344182')
+  assert.equal(normalizePhone('   \u200E  '), '')
+
+  const validUnicode = registerTeamSchema.safeParse({
+    teamName: 'Epsilon Team',
+    memberComposition: 'SAME_UNIVERSITY',
+    sourceInfo: 'INSTAGRAM',
+    leaderInfo: {
+      whatsapp: '\u200E+62 822-6685-9292',
+      institution: 'Universitas Indonesia',
+      major: 'Management',
+      yearOfStudy: '2nd year',
+    },
+    members: [
+      {
+        fullName: 'Kezia Nania Manik',
+        email: 'kezianania.manik@gmail.com',
+        whatsapp: '\u202A081212344182\u202C',
+        institution: 'Institut Teknologi Bandung',
+        major: 'SBM',
+        yearOfStudy: '1st year',
+      },
+    ],
+    agreeTerms: true,
+    confirmParticipation: true,
+  })
+  assert.equal(validUnicode.success, true)
+  if (validUnicode.success) {
+    assert.equal(validUnicode.data.leaderInfo.whatsapp, '082266859292')
+    assert.equal(validUnicode.data.members[0].whatsapp, '081212344182')
+  }
+
+  const emptyPhone = registerTeamSchema.safeParse({
+    teamName: 'Epsilon Team',
+    memberComposition: 'SAME_UNIVERSITY',
+    sourceInfo: 'INSTAGRAM',
+    leaderInfo: {
+      whatsapp: '+6282266859292',
+      institution: 'Universitas Indonesia',
+      major: 'Management',
+      yearOfStudy: '2nd year',
+    },
+    members: [
+      {
+        fullName: 'Kezia Nania Manik',
+        email: 'kezianania.manik@gmail.com',
+        whatsapp: '',
+        institution: 'Institut Teknologi Bandung',
+        major: 'SBM',
+        yearOfStudy: '1st year',
+      },
+    ],
+    agreeTerms: true,
+    confirmParticipation: true,
+  })
+  assert.equal(emptyPhone.success, false)
 })

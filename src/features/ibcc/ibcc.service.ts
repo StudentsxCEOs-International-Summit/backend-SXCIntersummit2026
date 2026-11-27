@@ -170,9 +170,12 @@ export async function registerTeam(
       throw new Error('Registration status configuration error: PENDING_PAYMENT status not found.');
     }
 
+    const updatedLeaderName = input.leaderInfo.fullName || leaderUser.name;
+
     await tx.user.update({
       where: { id: leaderUser.id },
       data: {
+        ...(input.leaderInfo.fullName ? { name: input.leaderInfo.fullName } : {}),
         wa_number: input.leaderInfo.whatsapp,
         institution_name: input.leaderInfo.institution,
         major: input.leaderInfo.major,
@@ -280,6 +283,7 @@ export async function registerTeam(
       team,
       teamCode: selectedCodeRecord.code,
       pendingFileIds,
+      leaderName: updatedLeaderName,
     };
   }, {
     maxWait: 15000,
@@ -291,7 +295,7 @@ export async function registerTeam(
   result.pendingFileIds.forEach(enqueueDriveUpload);
 
   const leaderEmail = renderTeamRegistrationConfirmationEmail({
-    leaderName: leaderUser.name,
+    leaderName: result.leaderName,
     teamName: result.team.name,
     teamCode: result.teamCode,
     memberCount: 1 + (input.members || []).length,
