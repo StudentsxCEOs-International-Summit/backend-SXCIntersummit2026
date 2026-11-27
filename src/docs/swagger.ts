@@ -321,8 +321,10 @@ REST API documentation for **SxC International Summit 2026** backend system.
               id: { type: 'integer', example: 12 },
               name: { type: 'string', example: 'John Doe' },
               email: { type: 'string', example: 'leader@ui.ac.id' },
+              whatsapp: { type: 'string', nullable: true, example: '081234567890' },
               institution: { type: 'string', example: 'Universitas Indonesia' },
               major: { type: 'string', nullable: true, example: 'Management' },
+              yearOfStudy: { type: 'string', nullable: true, example: '2nd year' },
             },
           },
           members: {
@@ -333,6 +335,7 @@ REST API documentation for **SxC International Summit 2026** backend system.
                 id: { type: 'integer', example: 15 },
                 name: { type: 'string', example: 'Jane Doe' },
                 email: { type: 'string', example: 'jane@ui.ac.id' },
+                whatsapp: { type: 'string', nullable: true, example: '081298765432' },
                 institution: { type: 'string', example: 'Universitas Indonesia' },
                 major: { type: 'string', nullable: true, example: 'Accounting' },
                 yearOfStudy: { type: 'string', example: '3rd year' },
@@ -1730,6 +1733,86 @@ REST API documentation for **SxC International Summit 2026** backend system.
           },
           401: {
             description: 'Unauthorized.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+          404: {
+            description: 'No registered team found for this user.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+        },
+      },
+      patch: {
+        tags: ['IBCC - Team Registration & Management'],
+        summary: 'Update team participant details (Leader only)',
+        description: 'Partially updates non-credential participant details (fullName, whatsapp, institution, major, yearOfStudy) for the team leader and/or team members. Team name and participant emails remain immutable and are rejected with 400.',
+        security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  leader: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      fullName: { type: 'string', example: 'Muhammad Azka' },
+                      whatsapp: { type: 'string', example: '+6281234567890' },
+                      institution: { type: 'string', example: 'Universitas Padjadjaran' },
+                      major: { type: 'string', example: 'Bisnis Digital' },
+                      yearOfStudy: { type: 'string', enum: ['1st year', '2nd year', '3rd year', '4th year'] },
+                    },
+                  },
+                  members: {
+                    type: 'array',
+                    maxItems: 2,
+                    items: {
+                      type: 'object',
+                      required: ['userId'],
+                      additionalProperties: false,
+                      properties: {
+                        userId: { type: 'integer', example: 15 },
+                        fullName: { type: 'string', example: 'Jane Doe' },
+                        whatsapp: { type: 'string', example: '081298765432' },
+                        institution: { type: 'string', example: 'Universitas Indonesia' },
+                        major: { type: 'string', example: 'Accounting' },
+                        yearOfStudy: { type: 'string', enum: ['1st year', '2nd year', '3rd year', '4th year'] },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Team details updated successfully.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Team details updated successfully.' },
+                    data: { $ref: '#/components/schemas/IbccMyTeamResponse' },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Validation error or attempt to modify immutable fields (teamName/email).',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+          401: {
+            description: 'Unauthorized.',
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
+          },
+          403: {
+            description: 'Forbidden: caller is not the team leader or targeted a user outside their team.',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/ApiErrorResponse' } } },
           },
           404: {
