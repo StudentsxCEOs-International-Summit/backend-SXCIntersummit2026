@@ -102,7 +102,7 @@ test('registerTeamSchema normalizes boolean inputs from checkboxes and radio but
   if (result.success) {
     assert.equal(result.data.memberComposition, 'MULTIPLE_UNIVERSITIES')
     assert.equal(result.data.sourceInfo, 'FRIENDS_FAMILY')
-    assert.equal(result.data.leaderInfo.whatsapp, '+6281234567890')
+    assert.equal(result.data.leaderInfo.whatsapp, '081234567890')
     assert.equal(result.data.agreeTerms, true)
     assert.equal(result.data.confirmParticipation, true)
     assert.deepEqual(result.data.members, [])
@@ -224,9 +224,10 @@ test('registerTeamSchema preserves optional leaderInfo.fullName and stays backwa
   }
 })
 
-test('normalizePhone and registerTeamSchema strip invisible Unicode marks while rejecting invalid numbers', () => {
-  assert.equal(normalizePhone('+6281212344182\u200E'), '+6281212344182')
-  assert.equal(normalizePhone('\u2066+6281212344182\u2069'), '+6281212344182')
+test('normalizePhone and registerTeamSchema strip invisible Unicode marks while preserving international codes', () => {
+  assert.equal(normalizePhone('+6281212344182\u200E'), '081212344182')
+  assert.equal(normalizePhone('\u2066+6281212344182\u2069'), '081212344182')
+  assert.equal(normalizePhone('\u2066+81312345678\u2069'), '+81312345678')
   assert.equal(normalizePhone('\u202A0812-1234-4182\u202C'), '081212344182')
   assert.equal(normalizePhone('\u200B(0812) 1234.4182'), '081212344182')
   assert.equal(normalizePhone('   \u200E  '), '')
@@ -256,7 +257,7 @@ test('normalizePhone and registerTeamSchema strip invisible Unicode marks while 
   })
   assert.equal(validUnicode.success, true)
   if (validUnicode.success) {
-    assert.equal(validUnicode.data.leaderInfo.whatsapp, '+6282266859292')
+    assert.equal(validUnicode.data.leaderInfo.whatsapp, '082266859292')
     assert.equal(validUnicode.data.members[0].whatsapp, '081212344182')
   }
 

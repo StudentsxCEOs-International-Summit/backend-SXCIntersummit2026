@@ -36,12 +36,20 @@ const parseBoolean = (val: unknown) => {
 
 export const normalizePhone = (val: unknown) => {
   if (typeof val !== 'string') return val;
-  // Strip any leading invisible Unicode marks, spaces, or punctuation before checking '+'.
-  const cleaned = val.replace(/^[^\d+]+/, '');
-  const hasLeadingPlus = cleaned.startsWith('+');
-  const digitsOnly = cleaned.replace(/\D/g, '');
-  if (!digitsOnly) return '';
-  return hasLeadingPlus ? `+${digitsOnly}` : digitsOnly;
+  // NFKC turns full-width digits and '+' into ASCII; strip leading invisible marks/punctuation before checking '+'.
+  const cleaned = val.normalize('NFKC').replace(/^[^\d+]+/, '');
+  const explicitCountryCode = cleaned.startsWith('+') || cleaned.startsWith('00');
+  let digits = cleaned.replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (!digits) return '';
+  // Store Indonesian numbers in one canonical form: 08...
+  if (digits.startsWith('62')) return '0' + digits.slice(2).replace(/^0+/, '');
+  // Guess missing Indonesian '0' only without explicit country code so +81/+82/+86/+852 stay intact.
+  if (!explicitCountryCode) {
+    if (digits.startsWith('0')) return digits;
+    if (digits.startsWith('8') && digits.length <= 12) return '0' + digits;
+  }
+  return explicitCountryCode ? `+${digits}` : digits;
 };
 
 const normalizeMemberComposition = (val: unknown) => {

@@ -80,6 +80,20 @@ const envSchema = z
     CRON_SECRET: z.string().optional(),
     // Full chat.whatsapp.com link on purpose: link shorteners (bit.ly, ...) in a mail are a strong spam signal.
     IBCC_WA_GROUP_LINK: z.url().default("https://chat.whatsapp.com/Hh5beE54nRB9S08sE5TWsI"),
+    REGISTRATION_DEADLINE: z
+      .string()
+      .default("2026-12-19T23:59:59+07:00"),
+    REGISTRATION_EXTENDED_DEADLINE: z
+      .string()
+      .default("2026-12-30T23:59:59+07:00"),
+    EXTENDED_REGISTRATION_ENABLED: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
+    MAX_SLIDE_PAGES: z.coerce.number().int().positive().default(5),
+    MAX_SLIDE_SIZE_MB: z.coerce.number().int().positive().default(20),
+    DEADLINE_REMINDER_DAYS: z.coerce.number().int().positive().default(3),
+    PAYMENT_REMINDER_DAYS: z.coerce.number().int().positive().default(3),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production" && !value.CORS_ORIGIN) {
