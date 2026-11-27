@@ -99,28 +99,33 @@ const emailSchema = z
   .trim()
   .toLowerCase()
   .pipe(z.email('Please enter a valid email address'));
+const fullNameSchema = z.string().trim().min(2, 'Full name must be at least 2 characters');
+const institutionSchema = z.string().trim().min(2, 'Institution is required');
+const majorSchema = z.string().trim().min(2, 'Major is required');
+const whatsappSchema = z.preprocess(
+  normalizePhone,
+  z
+    .string()
+    .trim()
+    .regex(phoneRegex, 'Please enter a valid WhatsApp number (e.g. 08123456789 or +628123456789)'),
+);
+const yearOfStudySchema = z.preprocess(normalizeYearOfStudy, yearOfStudyEnum);
 
 export const memberItemSchema = z.object({
   fullName: z.string().trim().min(2, 'Full name is required'),
   email: emailSchema,
-  whatsapp: z.preprocess(
-    normalizePhone,
-    z.string().trim().regex(phoneRegex, 'Please enter a valid WhatsApp number (e.g. 08123456789 or +628123456789)'),
-  ),
-  institution: z.string().trim().min(2, 'Institution is required'),
-  major: z.string().trim().min(2, 'Major is required'),
-  yearOfStudy: z.preprocess(normalizeYearOfStudy, yearOfStudyEnum),
+  whatsapp: whatsappSchema,
+  institution: institutionSchema,
+  major: majorSchema,
+  yearOfStudy: yearOfStudySchema,
 });
 
 export const leaderInfoSchema = z.object({
-  fullName: z.string().trim().min(2, 'Full name must be at least 2 characters').optional(),
-  whatsapp: z.preprocess(
-    normalizePhone,
-    z.string().trim().regex(phoneRegex, 'Please enter a valid WhatsApp number (e.g. 08123456789 or +628123456789)'),
-  ),
-  institution: z.string().trim().min(2, 'Institution is required'),
-  major: z.string().trim().min(2, 'Major is required'),
-  yearOfStudy: z.preprocess(normalizeYearOfStudy, yearOfStudyEnum),
+  fullName: fullNameSchema.optional(),
+  whatsapp: whatsappSchema,
+  institution: institutionSchema,
+  major: majorSchema,
+  yearOfStudy: yearOfStudySchema,
 });
 
 export const registerTeamSchema = z.object({
@@ -181,3 +186,60 @@ export const updatePreliminaryStatusSchema = z.object({
 export type SubmitScoreInput = z.infer<typeof submitScoreSchema>;
 export type PublishResultsInput = z.infer<typeof publishResultsSchema>;
 export type UpdatePreliminaryStatusInput = z.infer<typeof updatePreliminaryStatusSchema>;
+
+const editableParticipantFields = {
+  fullName: fullNameSchema.optional(),
+  whatsapp: whatsappSchema.optional(),
+  institution: institutionSchema.optional(),
+  major: majorSchema.optional(),
+  yearOfStudy: yearOfStudySchema.optional(),
+};
+
+const hasEditableField = (data: {
+  fullName?: string;
+  whatsapp?: string;
+  institution?: string;
+  major?: string;
+  yearOfStudy?: string;
+}) =>
+  data.fullName !== undefined ||
+  data.whatsapp !== undefined ||
+  data.institution !== undefined ||
+  data.major !== undefined ||
+  data.yearOfStudy !== undefined;
+
+export const updateMyTeamSchema = z
+  .object({
+    leader: z
+      .object(editableParticipantFields)
+      .strict()
+      .refine(hasEditableField, {
+        message: 'At least one leader field must be provided',
+      })
+      .optional(),
+    members: z
+      .array(
+        z
+          .object({
+            userId: z.coerce.number().int().positive('userId must be a positive integer'),
+            ...editableParticipantFields,
+          })
+          .strict()
+          .refine(hasEditableField, {
+            message: 'At least one member field must be provided',
+          }),
+      )
+      .max(2, 'Maximum 2 additional members can be updated')
+      .refine(
+        (items) => new Set(items.map((item) => item.userId)).size === items.length,
+        { message: 'Duplicate member userId in update payload' },
+      )
+      .optional(),
+  })
+  .strict()
+  .refine(
+    (data) => data.leader !== undefined || (data.members !== undefined && data.members.length > 0),
+    { message: 'Provide leader or members details to update' },
+  );
+
+export type UpdateMyTeamInput = z.infer<typeof updateMyTeamSchema>;

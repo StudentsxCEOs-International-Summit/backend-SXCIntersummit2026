@@ -5,6 +5,7 @@ const ibccLogger = createChildLogger('IBCC');
 
 /** How long after registration a blocked confirmation mail is still worth resending via the other account. */
 const CONFIRMATION_RESEND_WINDOW_MS = 6 * 60 * 60 * 1000;
+import type { Prisma } from '../../../generated/prisma/client';
 import prisma from '../../configs/db';
 import { env } from '../../configs/env';
 import { hashPassword } from '../../utils/bcrypt';
@@ -16,7 +17,9 @@ import {
   teamRegistrationConfirmationSubject,
   renderPreliminaryEvaluationEmail,
 } from './ibcc.templates';
-import { RegisterTeamInput } from './ibcc.schema';
+import { RegisterTeamInput, UpdateMyTeamInput } from './ibcc.schema';
+import { assertTeamEditAccess, IbccServiceError } from './ibcc.policy';
+export { IbccServiceError };
 import { sendSemifinalResultEmails } from './ibcc.status';
 import { isRepeatRegistrationTestEmail } from '../../utils/test-accounts';
 
@@ -365,15 +368,17 @@ async function assertSemifinalEligible(teamId: number) {
   return team;
 }
 
+const teamForUserWhere = (userId: number): Prisma.TeamWhereInput => ({
+  OR: [
+    { leaderId: userId },
+    { TeamMember: { some: { userId } } },
+  ],
+});
+
 export async function getMyTeam(userId: number) {
   // Single query joins all related models to eliminate N+1 roundtrips.
   const team = await prisma.team.findFirst({
-    where: {
-      OR: [
-        { leaderId: userId },
-        { TeamMember: { some: { userId } } },
-      ],
-    },
+    where: teamForUserWhere(userId),
     include: {
       leader: {
         select: {
@@ -412,12 +417,14 @@ export async function getMyTeam(userId: number) {
   }
 
   const isLeader = team.leaderId === userId;
+  const leaderMember = team.TeamMember.find((tm) => tm.userId === team.leaderId);
   const nonLeaderMembers = team.TeamMember.filter(
     (tm) => tm.userId !== team.leaderId,
   ).map((tm) => ({
     id: tm.user.id,
     name: tm.user.name,
     email: tm.user.email,
+    whatsapp: tm.user.wa_number,
     institution: tm.institution,
     major: tm.major,
     yearOfStudy: tm.yearOfStudy,
@@ -511,8 +518,10 @@ export async function getMyTeam(userId: number) {
       id: team.leader.id,
       name: team.leader.name,
       email: team.leader.email,
-      institution: team.leader.institution_name,
-      major: team.leader.major,
+      whatsapp: team.leader.wa_number,
+      institution: leaderMember?.institution ?? team.leader.institution_name,
+      major: leaderMember?.major ?? team.leader.major,
+      yearOfStudy: leaderMember?.yearOfStudy ?? null,
     },
     waGroupLink: env.IBCC_WA_GROUP_LINK ?? null,
     // TEMPORARY: a test account leading this team may open team registration again (its old team is
@@ -532,6 +541,68 @@ export async function getMyTeam(userId: number) {
       pendingFileCount,
     },
   };
+}
+
+type ParticipantPatch = NonNullable<UpdateMyTeamInput['leader']>;
+
+async function applyParticipantPatch(
+  tx: Prisma.TransactionClient,
+  teamId: number,
+  targetUserId: number,
+  patch: ParticipantPatch,
+) {
+  const userData: Prisma.UserUpdateInput = {};
+  if (patch.fullName !== undefined) userData.name = patch.fullName;
+  if (patch.whatsapp !== undefined) userData.wa_number = patch.whatsapp;
+  if (patch.institution !== undefined) userData.institution_name = patch.institution;
+  if (patch.major !== undefined) userData.major = patch.major;
+
+  if (Object.keys(userData).length > 0) {
+    await tx.user.update({ where: { id: targetUserId }, data: userData });
+  }
+
+  const teamMemberData: Prisma.TeamMemberUpdateManyMutationInput = {};
+  if (patch.institution !== undefined) teamMemberData.institution = patch.institution;
+  if (patch.major !== undefined) teamMemberData.major = patch.major;
+  if (patch.yearOfStudy !== undefined) teamMemberData.yearOfStudy = patch.yearOfStudy;
+
+  if (Object.keys(teamMemberData).length > 0) {
+    await tx.teamMember.updateMany({
+      where: { teamId, userId: targetUserId },
+      data: teamMemberData,
+    });
+  }
+}
+
+export async function updateMyTeam(userId: number, input: UpdateMyTeamInput) {
+  const team = await prisma.team.findFirst({
+    where: teamForUserWhere(userId),
+    select: {
+      id: true,
+      leaderId: true,
+      TeamMember: {
+        select: { userId: true, role: true },
+      },
+    },
+  });
+
+  const memberPatches = input.members ?? [];
+  assertTeamEditAccess(
+    team,
+    userId,
+    memberPatches.map((member) => member.userId),
+  );
+
+  await prisma.$transaction(async (tx) => {
+    if (input.leader) {
+      await applyParticipantPatch(tx, team.id, team.leaderId, input.leader);
+    }
+    for (const memberPatch of memberPatches) {
+      await applyParticipantPatch(tx, team.id, memberPatch.userId, memberPatch);
+    }
+  });
+
+  return getMyTeam(userId);
 }
 
 export async function submitPreliminarySlideDeck(

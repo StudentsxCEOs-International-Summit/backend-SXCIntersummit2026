@@ -10,6 +10,8 @@ import { getEffectiveDeadline } from '../../configs/appConfig';
 import {
   registerTeam,
   getMyTeam,
+  updateMyTeam,
+  IbccServiceError,
   submitPreliminarySlideDeck,
   submitSemifinalSlideDeck,
   submitPaymentProof,
@@ -22,6 +24,7 @@ import {
 } from './ibcc.service';
 import {
   RegisterTeamInput,
+  UpdateMyTeamInput,
   SubmitScoreInput,
   PublishResultsInput,
   UpdatePreliminaryStatusInput,
@@ -118,6 +121,28 @@ export async function getMyTeamHandler(req: AuthRequest, res: Response) {
     return ok(res, data, 'Team details retrieved successfully.');
   } catch (error: any) {
     return internalError(res, error.message || 'Failed to retrieve team details.');
+  }
+}
+
+export async function updateMyTeamHandler(req: AuthRequest, res: Response) {
+  try {
+    const userId = Number(req.user?.id);
+    if (!userId) {
+      return badRequest(res, 'User identity not found in token.');
+    }
+
+    const input = req.body as UpdateMyTeamInput;
+    const data = await updateMyTeam(userId, input);
+    ibccLogger.info({ userId, teamId: data?.id }, 'Team details updated by leader');
+    return ok(res, data, 'Team details updated successfully.');
+  } catch (error: any) {
+    if (error instanceof IbccServiceError) {
+      return error.statusCode === 404
+        ? notFound(res, error.message)
+        : forbidden(res, error.message);
+    }
+    ibccLogger.error({ err: error, userId: req.user?.id }, 'updateMyTeamHandler failed');
+    return internalError(res, error.message || 'Failed to update team details.');
   }
 }
 

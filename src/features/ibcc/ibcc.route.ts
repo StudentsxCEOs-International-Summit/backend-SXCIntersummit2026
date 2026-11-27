@@ -10,6 +10,7 @@ import {
 import {
   registerTeamHandler,
   getMyTeamHandler,
+  updateMyTeamHandler,
   submitPreliminaryHandler,
   submitSemifinalHandler,
   submitPaymentHandler,
@@ -21,6 +22,7 @@ import {
 } from './ibcc.controller';
 import {
   registerTeamSchema,
+  updateMyTeamSchema,
   submitScoreSchema,
   publishResultsSchema,
   teamIdParamSchema,
@@ -46,6 +48,13 @@ ibccRouter.post(
 );
 
 ibccRouter.get('/my-team', requireAuth, getMyTeamHandler);
+
+ibccRouter.patch(
+  '/my-team',
+  requireAuth,
+  validateRequest({ body: updateMyTeamSchema }),
+  updateMyTeamHandler,
+);
 
 // Participant file submissions
 ibccRouter.post(
