@@ -261,6 +261,12 @@ REST API documentation for **SxC International Summit 2026** backend system.
         type: 'object',
         required: ['whatsapp', 'institution', 'major', 'yearOfStudy'],
         properties: {
+          fullName: {
+            type: 'string',
+            minLength: 2,
+            example: 'John Doe',
+            description: 'Optional updated display name saved to the leader profile',
+          },
           whatsapp: { type: 'string', minLength: 8, example: '+6281234567890' },
           institution: { type: 'string', minLength: 3, example: 'Universitas Indonesia' },
           major: { type: 'string', minLength: 2, example: 'Management' },
@@ -1637,8 +1643,8 @@ REST API documentation for **SxC International Summit 2026** backend system.
                   },
                   leaderInfo: {
                     type: 'string',
-                    description: 'JSON-stringified leader details: { whatsapp, institution, major, yearOfStudy }',
-                    example: '{"whatsapp":"+6281234567890","institution":"Universitas Indonesia","major":"Management","yearOfStudy":"3rd year"}',
+                    description: 'JSON-stringified leader details: { fullName?, whatsapp, institution, major, yearOfStudy }',
+                    example: '{"fullName":"John Doe","whatsapp":"+6281234567890","institution":"Universitas Indonesia","major":"Management","yearOfStudy":"3rd year"}',
                   },
                   members: {
                     type: 'string',
